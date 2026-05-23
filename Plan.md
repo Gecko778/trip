@@ -1612,6 +1612,14 @@ Implementation notes:
 
 ## 22. Milestone plan
 
+Milestone 维护规则：
+
+- 每个 Milestone 接近完成时，必须回到本节更新该 Milestone 的状态说明。
+- 状态说明至少包含三部分：`当前实现标注`、`未完成 / 暂缓项`、`后续 Milestone 依赖时的处理规则`。
+- 如果某个能力只完成了基础结构或接口边界，不能在计划中写成完整完成；必须说明已完成范围和不能直接依赖的部分。
+- 后续 Milestone 如果依赖前序 Milestone 的暂缓项，必须先暂停实现并与产品确认设计方案，不能自行补齐支付、汇率、权限、法律、风控、第三方平台配置等高风险规则。
+- 每次更新 Milestone 状态时，应保持 `Plan.md` 是项目事实来源，而不是聊天记录；只记录可执行、可验收、可追溯的信息。
+
 ### Milestone 0: 数据库设计与迁移基础
 
 目标：先把产品对象落成稳定的数据结构，避免后端和前端在无数据契约的情况下开工。
@@ -1625,6 +1633,28 @@ Implementation notes:
 - 建立后台工单、举报、争议、审计日志表。
 - 输出 Alembic 初始 migration。
 - 输出 demo seed 的数据范围和依赖顺序。
+
+当前实现标注：
+
+- 已完成 `database/migrations/0001_initial_schema.sql`，覆盖市场、地区、币种、语言、支付方式、用户、身份、角色、权限、旅行者、导游、认证、旅行计划、聊天、订单、协议、支付、结算、会员、争议、后台工单、审计日志等核心表。
+- 已完成 `database/alembic/versions/0001_initial_schema.py`，通过 Alembic 管理初始 schema。
+- 已完成 `database/ERD.md` 和 `database/README.md`，用于说明核心实体关系和数据库结构。
+- 已完成 `database/seed_plan.md`，记录 demo seed 的范围和依赖顺序。
+- 已确认首发中国市场应通过 seed 创建，不应通过核心业务代码硬编码创建。
+- 已在后续 `0002_auth_tokens_and_invitations` migration 中补充 Auth refresh token 和后台邀请表，说明数据库结构会随 Milestone 继续演进，但必须通过 Alembic migration 追踪。
+
+未完成 / 暂缓项：
+
+- 初始 schema 已覆盖大部分规划对象，但仍可能在后续 Milestone 中按实际接口补充字段、索引、唯一约束和审计字段。
+- 部分业务规则表目前只是预留结构，例如支付 provider、抽佣、结算、会员、争议、风控和政策配置，不能视为业务规则已经完整设计。
+- ERD 和数据库文档需要在后续 migration 增加关键表或关系时同步维护。
+- 当前数据库设计不直接决定支付、汇率、法律责任、风控处罚、导游认证材料等业务细节；这些必须在对应 Milestone 中确认。
+
+后续 Milestone 依赖时的处理规则：
+
+- 如果后续功能发现现有表无法表达业务，不允许直接在业务代码中绕过数据模型；必须新增 Alembic migration，并同步更新数据库文档。
+- 如果后续功能依赖支付、结算、抽佣、会员、风控、争议等预留表，必须先确认字段语义、状态流、权限边界和审计要求。
+- 如果某个市场相关对象缺少 `market_id` 或 scope 字段，必须先确认是否属于全局 reference data；不能默认写成中国市场专用逻辑。
 
 验收标准：
 
@@ -1644,6 +1674,31 @@ Implementation notes:
 - 建立测试框架和基础 CI 命令。
 - 建立 Docker Compose 本地运行环境。
 
+当前实现标注：
+
+- 已完成 FastAPI 后端项目结构，入口位于 `backend/app/main.py`。
+- 已完成标准 success / error JSON envelope、异常处理和 trace id middleware。
+- 已完成 `/health` endpoint 和基础 health 测试。
+- 已完成配置加载基础结构，支持通过环境变量覆盖 PostgreSQL、Redis、MinIO、JWT 和 bootstrap admin 配置。
+- 已完成 SQLAlchemy session、Alembic wiring、`alembic.ini` 和本地数据库 migration 验证流程。
+- 已完成 Docker Compose 本地服务结构，覆盖 PostgreSQL、Redis、MinIO、Backend、Frontend。
+- 已完成 `backend/pyproject.toml`、`backend/Dockerfile`、基础 pytest 配置和 README 本地运行命令。
+
+未完成 / 暂缓项：
+
+- 当前只建立了基础测试命令和本地验证流程，尚未建立正式 GitHub Actions / CI workflow。
+- 日志目前只有基础应用结构，尚未建立结构化业务日志、访问日志规范、错误告警和指标采集。
+- Redis、MinIO 已作为环境与依赖配置存在，但尚未在业务功能中接入缓存、任务队列、限流、文件上传或对象存储流程。
+- 当前 Docker Compose 适合本地开发，不等同于生产部署方案；生产 secrets、网络、存储卷、备份、HTTPS、域名和监控仍需后续设计。
+- `.env.example` 中的本地默认值仅用于开发，生产环境必须替换 `JWT_SECRET_KEY`、bootstrap admin 密码和第三方 OAuth / 支付配置。
+
+后续 Milestone 依赖时的处理规则：
+
+- 如果后续功能需要异步任务、缓存、限流或锁，必须先明确 Redis 的使用模式和失败策略。
+- 如果后续功能需要图片、证据、协议、认证材料或报告上传，必须先设计 MinIO / S3 object key、访问权限、MIME 校验和生命周期规则。
+- 如果后续功能需要 CI 阶段强制检查，必须新增正式 CI workflow，而不是只依赖本地命令。
+- 如果后续功能需要生产部署，不应直接复用本地 Compose 作为生产架构；必须确认部署目标、环境变量管理、数据库备份和观测方案。
+
 验收标准：
 
 - `docker compose config` 通过。
@@ -1655,18 +1710,55 @@ Implementation notes:
 
 目标：先完成所有后续业务依赖的身份和权限底座。
 
-- 市场、地区、币种、语言、支付方式配置 CRUD。
+- 市场、地区、币种、语言、支付方式配置基础能力。
 - 用户注册、登录、刷新、登出、`/auth/me`。
 - 用户身份切换：旅行者 / 导游。
 - 角色、权限、scope-based RBAC。
 - 后端权限依赖函数和写操作权限测试。
 - 创建 `china_inbound` demo seed。
 
+当前实现标注：
+
+- 已完成 `china_inbound` seed、市场读取、地区读取、地区创建、市场配置读取和基础更新。
+- 已完成邮箱 / 手机号密码登录、JWT access / refresh、登出、`/auth/me`、旅行者 / 导游身份切换。
+- 已完成初始 `sys_admin` seed、后台邀请创建 / 接受、用户列表、用户详情、用户资料更新、用户角色分配。
+- 已完成 Google / Apple OAuth 登录接口边界和缺失配置报错，但真实第三方 token 验签未实现。
+- 已完成基础 RBAC dependency、`user:read`、`user:write`、`market.config:write`、`admin.invitation:create` 等权限检查。
+
+Milestone 2 暂缓项与后续设计方案：
+
+- Google / Apple OAuth 真实验签暂缓：
+  - 需要开发者后续提供 Google OAuth Client ID、Apple Service ID / Client ID、Apple Bundle ID、回调域名和平台类型。
+  - 配置位置应放在 `.env` / 部署环境变量中，并在 `.env.example` 保留 TODO 标记。
+  - 未填写时接口必须返回明确错误：`未填写Google/Apple Id, bundle id，到 /Users/gecko/trip/.env 内填写完整id`。
+  - 后续实现前必须确认移动端 / Web 端登录入口、回调方式、Apple 私钥管理方式和 token 生命周期。
+- 支付方式配置 CRUD 暂缓：
+  - 当前 seed 仅保留 `visa`、`mastercard`、`alipay`、`wechat_pay` 的基础配置占位，并默认不启用。
+  - 后续需要设计 payer / payee 两侧规则：旅行者支付方式、导游收款方式、平台商户账户、结算周期、手续费、退款能力、国家 / 地区可用性。
+  - 国际卡、Google Pay、Apple Pay、支付宝、微信支付、Stripe / Adyen / Airwallex 等 provider 不应写死在业务代码中，必须通过 provider account 和 market payment config 管理。
+  - 后续任何订单支付、退款、抽佣、结算、会员购买功能如果依赖支付配置，必须先暂停并确认支付 provider、收款主体、平台所在法域、KYC / KYB 和手续费策略。
+- 货币与汇率配置 CRUD 暂缓：
+  - 当前仅支持基础 currency reference 和同币种 quote fallback。
+  - 后续需要补充汇率来源 provider、更新时间、缓存策略、报价锁定时间、汇率快照、退款时使用原始汇率还是实时汇率。
+  - 导游报价币种、旅行者展示币种和实际支付币种必须分层，不允许只用一个 `currency_code` 混合表达。
+  - 后续任何价格展示、订单确认、支付、退款、结算功能如果依赖多币种，必须先确认汇率 provider、舍入规则、展示文案和快照规则。
+- 语言与 locale 配置 CRUD 暂缓：
+  - 当前 seed 仅保留 `zh-CN`、`en-US`、`en-GB` 等基础语言。
+  - 后续需要确认市场默认语言、用户偏好语言、内容翻译语言、后台审核语言、通知模板语言之间的关系。
+  - 前端文案、通知、协议模板、评价标签和目的地内容不得直接写死单一语言。
+  - 后续任何用户可见文案、本地化内容或通知模板功能如果依赖语言配置，必须先确认 locale fallback、翻译管理和运营维护方式。
+- 市场配置后台规则暂缓：
+  - 当前 `market_configs.config_json` 只作为轻量配置容器，不应承载复杂支付、法律、风控或推荐规则。
+  - 后续需要把市场级配置拆为更明确的配置类型，例如支付规则、内容规则、审核规则、推荐规则、地图规则、价格展示规则。
+  - 不同市场的数据隔离、权限 scope、可见地区、可用支付、默认币种、默认语言和政策规则都必须按 `market_id` 配置，不允许在核心业务代码中写死中国市场。
+  - 后续任何 Milestone 如果需要读取或修改这些暂缓配置，必须先与产品确认配置字段、后台操作入口、权限边界和审计要求。
+
 验收标准：
 
 - 用户可登录并获得当前市场、身份和权限。
 - 不同市场数据隔离。
 - 写接口权限由后端强制校验。
+- Milestone 2 暂缓项必须被保留为明确 TODO；后续 Milestone 依赖这些能力时，不能自行臆造实现方案，必须先确认业务规则。
 
 ### Milestone 3: 旅行者、导游与认证后端
 
@@ -1677,6 +1769,32 @@ Implementation notes:
 - 导游认证提交、审核状态、失败原因。
 - 导游信誉字段预留：评分、成交次数、取消率、违约率、平均回复时间。
 - 价格展示支持报价币种和旅行者展示币种字段。
+
+当前实现标注：
+
+- 已完成 `/me/profiles`，可读取当前用户的 role profiles、traveler profiles 和 guide profiles。
+- 已完成 `/me/onboarding` 读取和更新，用于记录 traveler / guide onboarding 状态。
+- 已完成旅行者资料创建、读取和更新，当前主要保存 `preference_json`。
+- 已完成导游资料创建、读取和更新，覆盖 home region、service regions、每日报价金额、报价币种、接机能力、性别、出生年、语言标签等基础字段。
+- 已完成导游认证提交和读取接口，提交后将导游认证状态置为 pending，并创建 guide verification 记录。
+- 已完成导游认证基础审核接口，具备 `guide.verification:review` 权限且符合市场 scope 的后台用户可将认证结果更新为 approved / rejected，并记录失败原因和审核人。
+- 已保留导游信誉字段读取：评分、成交次数、取消率、违约率、平均回复时间等，但这些值仍由后续订单、评价和风控流程产生。
+
+未完成 / 暂缓项：
+
+- 导游认证材料上传、证据文件、证件类型、头像真实性、服务地区证明、语言能力证明等具体字段暂未实现，需要结合 MinIO / S3 文件设计。
+- 当前认证审核是整体验收 / 拒绝，不支持按材料逐项审核；申诉、审核队列、审核日志详情和二次复审暂未实现。
+- `is_listed` 上架规则暂未开放修改，因为“导游是否必须认证后才能上架服务”仍需产品确认。
+- 每日价格目前只保存导游报价币种和金额，不做旅行者展示币种换算；任何多币种展示必须依赖 Milestone 2 暂缓的汇率规则确认。
+- 导游资料中的服务范围只保存 region id，不包含距离半径、跨城服务费、接机单独价格或节假日价格规则。
+- 旅行者 onboarding 目前只保存状态和偏好 JSON，尚未形成完整表单步骤、必填字段和完成度计算。
+
+后续 Milestone 依赖时的处理规则：
+
+- 如果前端需要展示“已认证 / 可上架 / 可接单”状态，必须先确认认证通过和上架之间的业务规则。
+- 如果后续搜索、订单或地图功能依赖导游价格，必须先确认多币种展示、汇率快照和价格锁定规则。
+- 如果后续认证功能需要上传证据材料，必须先完成 MinIO / S3 文件权限、MIME 校验、对象 key 和审核访问规则。
+- 如果后续推荐或搜索依赖导游信誉字段，必须先确认评价、订单完成、取消、违约和回复速度的计算来源。
 
 验收标准：
 
@@ -1694,6 +1812,31 @@ Implementation notes:
 - 地图图层数据接口：导游密度、旅行者计划、路线、推荐城市。
 - 导游搜索、旅行计划搜索、筛选和排序。
 - 推荐城市、景点、评论照片内容基础结构。
+
+当前实现标注：
+
+- 已完成旅行计划基础 CRUD：创建、读取、更新、发布为 active、归档为 archived。
+- 已完成旅行计划按 `market_id` 查询，保证查询入口必须带市场上下文。
+- 已完成基础市场隔离：列表只查询指定市场，详情读取会检查 private 计划的可见性。
+- 已完成行程路线节点基础 CRUD：新增、读取列表、更新、删除。
+- 已完成按 route node region 或 arrival region 查询旅行计划，用于后续导游按服务范围匹配计划的基础数据能力。
+- 已完成旅行计划写操作 owner / `user:write` 权限检查。
+
+未完成 / 暂缓项：
+
+- 可见范围目前只做最小保护：`private` 计划只允许本人或具备 `user:read` 的后台用户读取；`guides_only`、`travelers_only`、`public` 的完整业务含义暂未展开。
+- 导游搜索、旅行计划搜索排序、匹配分数、距离计算、价格匹配、语言匹配和回复速度排序暂未实现。
+- 地图图层数据接口、导游密度、旅行者计划热度、路线热度、推荐城市图层暂未实现。
+- 推荐城市、景点、评论照片内容基础结构尚未接 API；内容来源、审核、图片存储和排序规则需要后续确认。
+- 行程路线节点目前只保存 region、sequence、计划开始 / 结束时间和 notes，不包含交通方式、停留时长、机场 / 车站类型细分、多人团队路线规则。
+- 旅行计划预算目前只保存金额和币种，不进行汇率换算、预算匹配或支付能力判断。
+
+后续 Milestone 依赖时的处理规则：
+
+- 如果前端或导游端需要展示“匹配计划”，必须先确认匹配算法使用哪些字段：服务地区、日期、语言、预算、接机、距离、导游状态和认证状态。
+- 如果需要地图热度或路线图层，必须先确认数据来源、聚合粒度、隐私脱敏规则和是否允许展示用户密度。
+- 如果需要推荐城市 / 景点 / 评论照片，必须先确认内容来源、运营录入后台、图片存储、审核流程和排序策略。
+- 如果要完整实现 visibility，必须先确认 public、guides_only、travelers_only、private 在旅行者、导游、后台和未登录用户之间的可见边界。
 
 验收标准：
 
