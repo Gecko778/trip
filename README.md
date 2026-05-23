@@ -36,6 +36,10 @@ Included:
 - Travel plan create/read/update/publish/archive APIs.
 - Itinerary route node create/read/update/delete APIs.
 - Market-scoped travel plan listing with basic private-plan protection.
+- Message thread create/read/list APIs.
+- Message send/list APIs with basic greeting restriction.
+- Follow/unfollow and block/unblock APIs.
+- Blocked users cannot create threads or send messages.
 
 Not implemented yet:
 
@@ -44,6 +48,7 @@ Not implemented yet:
 - Guide listing rules for verified/unverified profiles.
 - Full travel plan visibility semantics for public/guides_only/travelers_only/private.
 - Map heat layers, recommendation content APIs, and search ranking algorithms.
+- Contact-risk detection, report handling, risk review work items, attachments, read receipts, message edit/delete, and real-time chat transport.
 - Email delivery for admin invitations.
 
 ## Backend Commands

@@ -227,3 +227,54 @@ def test_route_node_create_requires_authentication() -> None:
 
     assert response.status_code == 401
     assert response.json()["error"]["message"] == "Missing bearer token"
+
+
+def test_message_thread_create_requires_authentication() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/markets/00000000-0000-0000-0000-000000000100/message-threads",
+        json={"recipient_user_id": "00000000-0000-0000-0000-000000000001"},
+        headers={"x-trace-id": "thread-create-no-auth"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message"] == "Missing bearer token"
+
+
+def test_message_send_requires_authentication() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/message-threads/00000000-0000-0000-0000-000000000001/messages",
+        json={"body": "hello"},
+        headers={"x-trace-id": "message-send-no-auth"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message"] == "Missing bearer token"
+
+
+def test_follow_requires_authentication() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/users/00000000-0000-0000-0000-000000000001/follow",
+        headers={"x-trace-id": "follow-no-auth"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message"] == "Missing bearer token"
+
+
+def test_block_requires_authentication() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/users/00000000-0000-0000-0000-000000000001/block",
+        json={},
+        headers={"x-trace-id": "block-no-auth"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message"] == "Missing bearer token"

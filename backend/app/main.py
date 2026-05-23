@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.api.auth import router as auth_router
+from app.api.communications import router as communications_router
 from app.api.markets import router as markets_router
 from app.api.plans import router as plans_router
 from app.api.profiles import router as profiles_router
@@ -16,6 +17,7 @@ def create_app() -> FastAPI:
     app.add_middleware(TraceIdMiddleware)
     register_exception_handlers(app)
     app.include_router(auth_router)
+    app.include_router(communications_router)
     app.include_router(markets_router)
     app.include_router(plans_router)
     app.include_router(profiles_router)
