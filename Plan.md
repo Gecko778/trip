@@ -2194,6 +2194,37 @@ Milestone 2 暂缓项与后续设计方案：
 - CI 至少运行后端测试、前端构建和 E2E smoke。
 - 已知限制记录清楚。
 
+本 Milestone 已确认的产品规则：
+
+- M11 先做 `seed demo`，保证可稳定演示完整路径。
+- E2E 先只覆盖一条主路径：登录 -> 发布计划 -> 发现导游 -> 聊天 -> 订单确认 -> 匿名协议。
+- Docker Compose 接入 PostgreSQL、backend、frontend、Redis、MinIO；Redis / MinIO 先作为基础设施服务接入，不强行实现依赖它们的业务能力。
+- CI 先做本地脚本级别：后端 pytest + 前端 build + E2E smoke，不接 GitHub Actions。
+- README 同时写“开发者安装运行指南”和“产品演示流程”。
+
+当前实现标注：
+
+- 已重写 `backend/app/seed.py` 为确定性 demo seed，支持 `python -m app.seed demo`。
+- Seed demo 已覆盖：默认 `china_inbound` 市场、中国核心城市、12 个旅行者、12 个导游、3 个已认证导游、3 个待审核导游、10 条旅行计划、5 条聊天会话、3 个订单、匿名协议、争议案例、10 条评价、10 条通知。
+- 已新增 `scripts/e2e_smoke.py`，使用后端 API 验证主路径：登录 -> 发布计划 -> 发现导游 -> 聊天 -> 订单确认 -> 匿名协议。
+- 已新增 `scripts/local_ci.sh`，串联后端 pytest、前端 build、Alembic 迁移、demo seed 和 E2E smoke。
+- 已整理 Docker Compose，包含 PostgreSQL、backend、frontend、Redis、MinIO；backend 容器启动时执行迁移和 demo seed。
+- 已修正 backend / frontend Dockerfile 的依赖安装方式，并补充 Docker ignore 文件。
+- 已验证 `scripts/local_ci.sh` 通过：后端 pytest、前端 build、迁移、demo seed、E2E smoke 全部成功。
+
+未完成 / 暂缓项：
+
+- Playwright 浏览器级 E2E 暂缓；当前 M11 smoke 覆盖 API 主路径，后续如要验证真实 UI 点击流，需要再引入 Playwright 和浏览器测试数据隔离策略。
+- GitHub Actions 暂缓；当前只保留本地 CI 脚本。
+- Redis / MinIO 已接入 Compose，但业务侧队列、缓存、对象上传、生命周期和访问权限仍按前序 Milestone 暂缓项处理。
+- Compose 镜像构建和全量容器启动仍需在本地 Docker 环境中按需验证；当前已验证 `docker compose config --quiet`，尚未执行完整 `docker compose up --build`。
+
+后续 Milestone 依赖时的处理规则：
+
+- 如果进入真实上线流程，必须补齐生产级环境变量、密钥管理、日志、备份、对象存储权限、CORS / 域名、HTTPS 和部署目标。
+- 如果要把 E2E 提升到浏览器级测试，先确认测试账号、数据重置策略、前端选择器稳定性和是否引入 Playwright。
+- 如果要接 GitHub Actions，先确认仓库 secrets、Docker registry、部署环境和是否允许 CI 访问测试数据库。
+
 ## 23. Seed data requirements
 
 ```bash

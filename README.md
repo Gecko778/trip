@@ -1,196 +1,191 @@
 # Travel Service Platform
 
-This repository follows `Plan.md`.
+Market-aware travel guide platform for overseas travelers visiting China. `Plan.md` is the project source of truth.
 
-## Current Milestone
+## Current Status
 
-Milestone 8 has a completed frontend foundation slice. The current implementation covers market-aware backend APIs plus the frontend API client, auth bootstrap, token storage, and initial data loading framework.
+The project is in Milestone 11 foundation work. The backend, frontend API layer, demo seed, local CI smoke flow, and Docker Compose wiring are available for local development.
 
-Included:
+Implemented core slices:
 
-- FastAPI project structure.
-- Standard success and error envelopes.
-- Trace id middleware.
-- `/health` endpoint.
-- PostgreSQL, Redis, MinIO, and backend Docker Compose services.
-- Alembic wiring to the existing database migration.
-- Pytest smoke tests.
-- `china_inbound` demo seed.
-- Read-only market, region, currency, and payment method endpoints.
-- Email/password and phone/password registration and login.
-- JWT access/refresh tokens with refresh token revocation on logout.
-- `/api/v1/auth/me`.
-- Seeded `sys_admin` bootstrap account.
-- Admin invitation create/accept flow for market admins, reviewers, and support users.
-- Traveler / guide role switching through `/api/v1/me/role-switch`.
-- User listing, user detail, and role assignment APIs protected by RBAC.
-- User update API protected by RBAC.
-- Region create and detail APIs protected by RBAC and market scope checks.
-- Market config write API protected by RBAC and market scope checks.
-- Exchange rate quote API with identity-currency fallback.
-- Google/Apple OAuth API contract placeholder.
-- Traveler and guide profile create/read/update APIs.
-- Basic onboarding status APIs.
-- Guide verification submit/read APIs.
-- Basic guide verification review API protected by RBAC and market scope checks.
-- Travel plan create/read/update/publish/archive APIs.
-- Itinerary route node create/read/update/delete APIs.
-- Market-scoped travel plan listing with basic private-plan protection.
-- Message thread create/read/list APIs.
-- Message send/list APIs with basic greeting restriction.
-- Follow/unfollow and block/unblock APIs.
-- Blocked users cannot create threads or send messages.
-- Order create/read/list APIs.
-- Order creation from chat threads, travel plans, or direct guide selection.
-- Independent traveler price confirmation and guide itinerary confirmation.
-- Anonymous agreement creation and signing after both sides confirm.
-- Order cancellation with a 24-hour penalty marker placeholder.
-- Order completion and completed-order review APIs.
-- Database notification list/read APIs.
-- No-op Email/Push notification delivery interface placeholders.
-- Percentage and fixed-fee commission policy APIs.
-- Order commission preview with composable commission strategies.
-- Payment record placeholder API without real provider calls.
-- Payout account draft/list APIs without real account verification.
-- Membership plan and subscription placeholder APIs.
-- Order dispute create/list APIs.
-- Admin order and dispute list APIs for admin/support roles.
-- Frontend API client with standard envelope/error handling.
-- Frontend localStorage access/refresh token storage.
-- Frontend auth bootstrap through `/api/v1/auth/me`.
-- Frontend startup loading for markets, profiles, travel plans, message threads, and orders.
-- LoginPage email login/register wired to real backend APIs.
-- Vite frontend build verified.
+- FastAPI backend with standard response envelopes and trace ids.
+- PostgreSQL schema managed by Alembic.
+- Auth with email/password, JWT access/refresh tokens, `/auth/me`, role switching, and RBAC.
+- Market, region, currency, payment config placeholders, traveler/guide profiles, guide verification.
+- Travel plans, route nodes, message threads, greeting restriction, follow/block.
+- Orders, independent traveler/guide confirmation, anonymous agreement signing, completion, reviews, notifications.
+- Commerce placeholders for commission, payment records, payout accounts, membership, disputes, admin lists.
+- React/Vite frontend API client, auth bootstrap, login/register, discovery, plans, messages, orders, agreement, notifications, guide verification, and admin basics.
+- Stable demo seed and API smoke path.
 
-Not implemented yet:
+Known deferred areas:
 
-- Real Google/Apple provider token verification.
-- Full guide verification material upload, per-material review, appeal workflow, and review queue.
-- Guide listing rules for verified/unverified profiles.
-- Full travel plan visibility semantics for public/guides_only/travelers_only/private.
-- Map heat layers, recommendation content APIs, and search ranking algorithms.
-- Contact-risk detection, report handling, risk review work items, attachments, read receipts, message edit/delete, and real-time chat transport.
-- Real payment, exchange-rate conversion, commission, refund, dispute, and settlement flows.
-- Real payment provider integration, split payments, payout execution, and KYC/KYB checks.
-- Concrete cancellation penalty amount, reputation impact, exemption, and appeal rules.
-- Agreement breach marking, reputation impact, penalties, appeal, and manual review rules.
-- Dispute arbitration, evidence standard, refund execution, and legal workflow rules.
-- Real Email/Push providers, templates, retry policy, and notification preferences.
-- Rich review media, moderation, rating aggregation, and review dispute workflow.
-- Email delivery for admin invitations.
-- Full replacement of Figma mock page data with live API data.
-- Real Google/Apple/WeChat login, phone SMS login, and forgot-password email flow.
+- Real Google/Apple/phone OAuth/SMS verification.
+- Real payment providers, payouts, refunds, KYC/KYB, and exchange-rate provider integration.
+- Full legal agreement copy, multilingual versions, and e-sign legal rules.
+- Uploads for guide verification materials and evidence files.
+- Email/Push providers, templates, retry policy, and notification preferences.
+- Browser-level Playwright E2E and GitHub Actions CI.
+- Recommendation ranking, map heat layers, true GIS routing, and complex moderation workflows.
 
-## Backend Commands
+## Requirements
 
-Create and activate the project virtual environment before running backend commands:
+- macOS or Linux shell
+- Python 3.12
+- Node.js compatible with the frontend package lock
+- Docker Desktop for PostgreSQL / Compose workflows
+- Local PostgreSQL on `127.0.0.1:5432` or Docker Compose PostgreSQL
+
+## Developer Setup
+
+From the repository root:
 
 ```bash
 cd /Users/gecko/trip
+```
+
+Create and activate the Python environment:
+
+```bash
+python3.12 -m venv .venv
 source .venv/bin/activate
+pip install -e "backend[dev]"
 ```
 
-Run tests:
-
-```bash
-cd /Users/gecko/trip/backend
-pytest
-```
-
-Run the API locally:
-
-```bash
-cd /Users/gecko/trip/backend
-uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-Check health:
-
-```bash
-curl -i -H 'x-trace-id: local-check' http://127.0.0.1:8000/health
-```
-
-Seed local demo data:
-
-```bash
-cd /Users/gecko/trip/backend
-DATABASE_URL=postgresql+psycopg://trip:trip@127.0.0.1:5432/trip python -m app.seed
-```
-
-The demo seed creates a local bootstrap system admin:
-
-```text
-email: admin@trip.local
-password: ChangeMe123!
-```
-
-Run auth smoke checks:
-
-```bash
-curl -s http://127.0.0.1:8000/api/v1/auth/login \
-  -H 'content-type: application/json' \
-  -d '{"provider":"email","identifier":"admin@trip.local","password":"ChangeMe123!"}'
-
-curl -s http://127.0.0.1:8000/api/v1/auth/register \
-  -H 'content-type: application/json' \
-  -d '{"provider":"phone","identifier":"+447700900123","password":"PhonePass123!","display_name":"Phone Traveler"}'
-```
-
-If Google/Apple ids are still empty in `/Users/gecko/trip/.env`, OAuth login returns:
-
-```text
-未填写Google/Apple Id, bundle id，到 /Users/gecko/trip/.env 内填写完整id
-```
-
-Check market APIs:
-
-```bash
-curl -s -H 'x-trace-id: market-check' http://127.0.0.1:8000/api/v1/markets
-curl -s -H 'x-trace-id: market-check' http://127.0.0.1:8000/api/v1/markets/00000000-0000-0000-0000-000000000100/config
-curl -s -H 'x-trace-id: market-check' http://127.0.0.1:8000/api/v1/markets/00000000-0000-0000-0000-000000000100/regions
-curl -s -H 'x-trace-id: market-check' http://127.0.0.1:8000/api/v1/markets/00000000-0000-0000-0000-000000000100/payment-methods
-curl -s -H 'x-trace-id: market-check' 'http://127.0.0.1:8000/api/v1/markets/00000000-0000-0000-0000-000000000100/exchange-rates/quote?source_currency=CNY&target_currency=CNY&amount=100'
-```
-
-Validate Compose configuration:
-
-```bash
-cd /Users/gecko/trip
-docker compose config --quiet
-```
-
-Check Alembic revision against a local database:
-
-```bash
-cd /Users/gecko/trip
-DATABASE_URL=postgresql+psycopg://trip:trip@127.0.0.1:5432/trip alembic current
-```
-
-If the schema was applied manually before Alembic versioning, mark it without recreating tables:
-
-```bash
-DATABASE_URL=postgresql+psycopg://trip:trip@127.0.0.1:5432/trip alembic stamp head
-```
-
-## Frontend Commands
-
-Install dependencies:
+Install frontend dependencies:
 
 ```bash
 cd /Users/gecko/trip/frontend
 npm install --legacy-peer-deps
 ```
 
-Run the frontend locally:
+Start PostgreSQL only if it is not already running:
+
+```bash
+cd /Users/gecko/trip
+docker compose up -d postgres
+```
+
+Apply migrations and seed demo data:
+
+```bash
+cd /Users/gecko/trip
+DATABASE_URL=postgresql+psycopg://trip:trip@127.0.0.1:5432/trip .venv/bin/alembic upgrade head
+cd /Users/gecko/trip/backend
+DATABASE_URL=postgresql+psycopg://trip:trip@127.0.0.1:5432/trip ../.venv/bin/python -m app.seed demo
+```
+
+Run the backend:
+
+```bash
+cd /Users/gecko/trip/backend
+DATABASE_URL=postgresql+psycopg://trip:trip@127.0.0.1:5432/trip ../.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Run the frontend:
 
 ```bash
 cd /Users/gecko/trip/frontend
-npm run dev -- --host 127.0.0.1
+VITE_API_BASE_URL=http://127.0.0.1:8000 npm run dev -- --host 127.0.0.1
 ```
 
-Build the frontend:
+Open:
+
+- Frontend: `http://127.0.0.1:5173`
+- Backend health: `http://127.0.0.1:8000/health`
+
+## Docker Compose
+
+Compose includes PostgreSQL, Redis, MinIO, backend, and frontend. Backend startup runs migrations and demo seed.
 
 ```bash
-cd /Users/gecko/trip/frontend
-npm run build
+cd /Users/gecko/trip
+docker compose up --build
 ```
+
+Useful endpoints:
+
+- Frontend: `http://127.0.0.1:5173`
+- Backend: `http://127.0.0.1:8000`
+- MinIO console: `http://127.0.0.1:9001`
+
+Validate Compose syntax:
+
+```bash
+docker compose config --quiet
+```
+
+## Demo Accounts
+
+All demo account passwords use:
+
+```text
+DemoPass123!
+```
+
+Seeded accounts:
+
+- Traveler: `traveler1@trip.local`
+- Guide: `guide1@trip.local`
+- Reviewer: `reviewer@trip.local`
+- Support: `support@trip.local`
+
+Bootstrap system admin:
+
+```text
+email: admin@trip.local
+password: ChangeMe123!
+```
+
+## Product Demo Flow
+
+1. Log in as `traveler1@trip.local`.
+2. Open plans and create/publish a China travel plan.
+3. Open discovery and view seeded guide profiles.
+4. Start a chat with a guide.
+5. Create or open an order from the existing seeded order list.
+6. Confirm price as traveler and itinerary as guide.
+7. Sign the anonymous agreement after both sides confirm.
+8. Complete the order and submit a review.
+9. Check notifications and admin/reviewer basics with reviewer/support/admin accounts.
+
+The automated API smoke test covers the main path:
+
+```bash
+cd /Users/gecko/trip
+DATABASE_URL=postgresql+psycopg://trip:trip@127.0.0.1:5432/trip .venv/bin/python scripts/e2e_smoke.py
+```
+
+## Local CI
+
+Run backend tests, frontend build, migrations, demo seed, and E2E smoke:
+
+```bash
+cd /Users/gecko/trip
+DATABASE_URL=postgresql+psycopg://trip:trip@127.0.0.1:5432/trip scripts/local_ci.sh
+```
+
+Current expected result:
+
+```text
+Backend tests pass
+Frontend build passes
+Demo seed passes
+E2E smoke passed: login -> plan -> guide -> chat -> order -> agreement
+```
+
+The frontend build may warn about chunk size. This is recorded in `Plan.md` and does not block the MVP demo.
+
+## OAuth Configuration Notes
+
+Google/Apple real token verification is intentionally not faked. If IDs are empty in `/Users/gecko/trip/.env`, OAuth login returns:
+
+```text
+未填写Google/Apple Id, bundle id，到 /Users/gecko/trip/.env 内填写完整id
+```
+
+Fill these later:
+
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `APPLE_OAUTH_CLIENT_ID`
+- `APPLE_OAUTH_BUNDLE_ID`

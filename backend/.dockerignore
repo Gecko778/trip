@@ -1,0 +1,4 @@
+.pytest_cache
+trip_backend.egg-info
+__pycache__
+*.pyc

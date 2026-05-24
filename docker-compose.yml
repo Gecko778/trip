@@ -10,12 +10,22 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trip -d trip"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   redis:
     image: redis:7-alpine
     container_name: trip_redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   minio:
     image: minio/minio:latest
@@ -39,21 +49,35 @@ services:
       DATABASE_URL: postgresql+psycopg://trip:trip@postgres:5432/trip
       REDIS_URL: redis://redis:6379/0
       MINIO_ENDPOINT: minio:9000
+      JWT_SECRET_KEY: local-compose-change-me-minimum-32-bytes
+      BOOTSTRAP_ADMIN_EMAIL: admin@trip.local
+      BOOTSTRAP_ADMIN_PASSWORD: ChangeMe123!
+      BOOTSTRAP_ADMIN_DISPLAY_NAME: System Admin
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - ./database:/database
+      - ./database:/app/database
+      - ./alembic.ini:/app/alembic.ini:ro
+    command: >
+      sh -c "alembic -c /app/alembic.ini upgrade head &&
+             python -m app.seed demo &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     depends_on:
-      - postgres
-      - redis
-      - minio
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: trip_frontend
+    environment:
+      VITE_API_BASE_URL: http://127.0.0.1:8000
     ports:
       - "5173:5173"
     volumes:
