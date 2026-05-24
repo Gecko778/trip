@@ -278,3 +278,57 @@ def test_block_requires_authentication() -> None:
 
     assert response.status_code == 401
     assert response.json()["error"]["message"] == "Missing bearer token"
+
+
+def test_order_create_requires_authentication() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/markets/00000000-0000-0000-0000-000000000100/orders",
+        json={
+            "guide_user_id": "00000000-0000-0000-0000-000000000002",
+            "guide_price_amount": "1000.00",
+            "guide_price_currency": "CNY",
+            "service_start_date": "2026-06-01",
+            "cancellation_policy": "Cancel before service start.",
+            "breach_responsibility": "Each party is responsible for confirmed obligations.",
+        },
+        headers={"x-trace-id": "order-create-no-auth"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message"] == "Missing bearer token"
+
+
+def test_order_agreement_sign_requires_authentication() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/orders/00000000-0000-0000-0000-000000000001/agreement/sign",
+        headers={"x-trace-id": "agreement-sign-no-auth"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message"] == "Missing bearer token"
+
+
+def test_order_review_requires_authentication() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/orders/00000000-0000-0000-0000-000000000001/reviews",
+        json={"rating": "5", "body": "Great service."},
+        headers={"x-trace-id": "order-review-no-auth"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message"] == "Missing bearer token"
+
+
+def test_notifications_require_authentication() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/v1/me/notifications", headers={"x-trace-id": "notifications-no-auth"})
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message"] == "Missing bearer token"

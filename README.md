@@ -4,7 +4,7 @@ This repository follows `Plan.md`.
 
 ## Current Milestone
 
-Milestone 2 is in progress. The current implemented slice establishes market reference data and read-only market configuration APIs.
+Milestone 6 has a completed low-risk backend slice. The current implementation covers market-aware auth, profiles, travel plans, chat, and the non-payment order flow.
 
 Included:
 
@@ -40,6 +40,14 @@ Included:
 - Message send/list APIs with basic greeting restriction.
 - Follow/unfollow and block/unblock APIs.
 - Blocked users cannot create threads or send messages.
+- Order create/read/list APIs.
+- Order creation from chat threads, travel plans, or direct guide selection.
+- Independent traveler price confirmation and guide itinerary confirmation.
+- Anonymous agreement creation and signing after both sides confirm.
+- Order cancellation with a 24-hour penalty marker placeholder.
+- Order completion and completed-order review APIs.
+- Database notification list/read APIs.
+- No-op Email/Push notification delivery interface placeholders.
 
 Not implemented yet:
 
@@ -49,6 +57,11 @@ Not implemented yet:
 - Full travel plan visibility semantics for public/guides_only/travelers_only/private.
 - Map heat layers, recommendation content APIs, and search ranking algorithms.
 - Contact-risk detection, report handling, risk review work items, attachments, read receipts, message edit/delete, and real-time chat transport.
+- Real payment, exchange-rate conversion, commission, refund, dispute, and settlement flows.
+- Concrete cancellation penalty amount, reputation impact, exemption, and appeal rules.
+- Agreement breach marking, reputation impact, penalties, appeal, and manual review rules.
+- Real Email/Push providers, templates, retry policy, and notification preferences.
+- Rich review media, moderation, rating aggregation, and review dispute workflow.
 - Email delivery for admin invitations.
 
 ## Backend Commands
