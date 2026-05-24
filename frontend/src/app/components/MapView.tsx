@@ -1,11 +1,26 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, Filter, Layers, Box, Map as MapIcon, Star } from 'lucide-react';
 import { useApp } from '../App';
 import { motion, AnimatePresence } from 'motion/react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 type MapLayer = 'heat' | 'guides' | 'travelers' | 'routes';
 type RouteStatus = 'ongoing' | 'upcoming' | 'historical';
+type LatLng = { lat: number; lng: number };
+
+const CHINA_MAP_CENTER: [number, number] = [34.3416, 108.9398];
+
+function createEmojiMarker(icon: string, bgClass: string, ringClass = 'border-white') {
+  return L.divIcon({
+    className: '',
+    html: `<div class="w-10 h-10 rounded-full border-2 shadow-lg flex items-center justify-center text-white font-bold ${bgClass} ${ringClass}">${icon}</div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    popupAnchor: [0, -20],
+  });
+}
 
 export function MapView() {
   const { role, data } = useApp();
@@ -13,6 +28,9 @@ export function MapView() {
   const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [is3DMode, setIs3DMode] = useState(false);
   const [tilt, setTilt] = useState(0);
+  const mapElementRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const overlayGroupRef = useRef<L.LayerGroup | null>(null);
 
   const toggleLayer = (layer: MapLayer) => {
     setActiveLayers(prev =>
@@ -180,11 +198,116 @@ export function MapView() {
     }
   };
 
+  useEffect(() => {
+    if (!mapElementRef.current || mapRef.current) return;
+
+    const map = L.map(mapElementRef.current, {
+      center: CHINA_MAP_CENTER,
+      zoom: 5,
+      minZoom: 3,
+      maxZoom: 18,
+      zoomControl: false,
+      scrollWheelZoom: true,
+    });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+
+    const overlayGroup = L.layerGroup().addTo(map);
+    mapRef.current = map;
+    overlayGroupRef.current = overlayGroup;
+
+    requestAnimationFrame(() => map.invalidateSize());
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      overlayGroupRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const overlayGroup = overlayGroupRef.current;
+    const map = mapRef.current;
+    if (!overlayGroup || !map) return;
+
+    overlayGroup.clearLayers();
+
+    if (activeLayers.includes('routes')) {
+      currentRoutes.forEach(route => {
+        const line = L.polyline(
+          route.points.map((point: LatLng) => [point.lat, point.lng]),
+          {
+            color: getRouteColor(route.status),
+            weight: route.status === 'ongoing' ? 4 : 3,
+            opacity: route.status === 'historical' ? 0.45 : 0.85,
+            dashArray: route.status === 'upcoming' ? '6 8' : undefined,
+          }
+        );
+        line.bindPopup(`<strong>${route.name}</strong><br>${getRouteStatusLabel(route.status)}`);
+        line.addTo(overlayGroup);
+      });
+    }
+
+    if (activeLayers.includes('guides')) {
+      guides.forEach(guide => {
+        const displayIcon = guide.activeOrderRole === 'traveler' ? '😎' : '🧑‍✈️';
+        const displayBg = guide.activeOrderRole === 'traveler' ? 'bg-green-600' : 'bg-blue-600';
+        const ringClass = guide.isFollowed
+          ? 'border-yellow-400 ring-2 ring-yellow-400'
+          : guide.activeOrderRole
+            ? 'border-orange-400 ring-2 ring-orange-400'
+            : 'border-white';
+        const marker = L.marker([guide.lat, guide.lng], {
+          icon: createEmojiMarker(displayIcon, displayBg, ringClass),
+        });
+        marker.bindPopup(`
+          <a href="/user/${guide.id}" style="font-weight:600;color:#1d4ed8">${guide.name}</a>
+          <br>${guide.location}
+          <br><strong style="color:#2563eb">¥${guide.price}/天</strong>
+          ${guide.isFollowed ? '<br><span style="color:#ca8a04">已关注</span>' : ''}
+        `);
+        marker.addTo(overlayGroup);
+      });
+    }
+
+    if (activeLayers.includes('travelers')) {
+      travelers.forEach(traveler => {
+        const marker = L.marker([traveler.lat, traveler.lng], {
+          icon: createEmojiMarker('😎', 'bg-green-600', traveler.activeOrderRole ? 'border-orange-400 ring-2 ring-orange-400' : 'border-white'),
+        });
+        marker.bindPopup(`
+          <a href="/user/${traveler.id}" style="font-weight:600;color:#15803d">${traveler.plan}</a>
+          <br>${traveler.location}
+        `);
+        marker.addTo(overlayGroup);
+      });
+    }
+
+    if (activeLayers.includes('heat')) {
+      [
+        { center: cityCoordinates.上海, radius: 42 },
+        { center: cityCoordinates.北京, radius: 34 },
+        { center: cityCoordinates.杭州, radius: 28 },
+      ].forEach(item => {
+        L.circleMarker([item.center.lat, item.center.lng], {
+          radius: item.radius,
+          color: '#f97316',
+          fillColor: '#ef4444',
+          fillOpacity: 0.18,
+          opacity: 0.35,
+        }).addTo(overlayGroup);
+      });
+    }
+
+    requestAnimationFrame(() => map.invalidateSize());
+  }, [activeLayers, role, data?.travelPlans, is3DMode]);
+
   return (
     <div className="relative h-[calc(100vh-7rem)]">
       {/* Map Container */}
       <motion.div
-        className="absolute inset-0 bg-gradient-to-br from-blue-50 to-green-50"
+        className="absolute inset-0 bg-slate-100"
         animate={{
           rotateX: is3DMode ? tilt : 0,
         }}
@@ -194,197 +317,7 @@ export function MapView() {
           transformStyle: 'preserve-3d',
         }}
       >
-        {/* Simplified Map View */}
-        <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
-          {/* 3D Grid Effect */}
-          {is3DMode && (
-            <div className="absolute inset-0 pointer-events-none">
-              <svg className="w-full h-full opacity-20">
-                <defs>
-                  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="gray" strokeWidth="0.5"/>
-                  </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#grid)" />
-              </svg>
-            </div>
-          )}
-
-          {/* Route Lines */}
-          {activeLayers.includes('routes') && (
-            <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
-              <AnimatePresence mode="wait">
-                {currentRoutes.map(route => (
-                  <motion.g
-                    key={`${role}-${route.id}`}
-                    initial={{ opacity: 0, pathLength: 0 }}
-                    animate={{ opacity: 1, pathLength: 1 }}
-                    exit={{ opacity: 0, pathLength: 0 }}
-                    transition={{ duration: 0.8, delay: 0.2 }}
-                  >
-                    {route.points.map((point, i) => {
-                      if (i === route.points.length - 1) return null;
-                      const nextPoint = route.points[i + 1];
-                      const x1 = `${(point.lng - 116) * 30 + 30}%`;
-                      const y1 = `${(40 - point.lat) * 30 + 20}%`;
-                      const x2 = `${(nextPoint.lng - 116) * 30 + 30}%`;
-                      const y2 = `${(40 - nextPoint.lat) * 30 + 20}%`;
-
-                      return (
-                        <motion.line
-                          key={i}
-                          x1={x1}
-                          y1={y1}
-                          x2={x2}
-                          y2={y2}
-                          stroke={getRouteColor(route.status)}
-                          strokeWidth={route.status === 'ongoing' ? '3' : '2'}
-                          strokeDasharray={route.status === 'upcoming' ? '5,5' : undefined}
-                          opacity={route.status === 'historical' ? '0.4' : '0.8'}
-                          initial={{ pathLength: 0 }}
-                          animate={{ pathLength: 1 }}
-                          transition={{ duration: 1, delay: i * 0.2 }}
-                        />
-                      );
-                    })}
-                  </motion.g>
-                ))}
-              </AnimatePresence>
-            </svg>
-          )}
-
-          {/* Guide Markers */}
-          {activeLayers.includes('guides') && guides.map(guide => {
-            const displayIcon = guide.activeOrderRole === 'guide' ? '🧑‍✈️' : guide.activeOrderRole === 'traveler' ? '😎' : '🧑‍✈️';
-            const displayBg = guide.activeOrderRole === 'guide' ? 'bg-blue-600' : guide.activeOrderRole === 'traveler' ? 'bg-green-600' : 'bg-blue-600';
-            const hasActiveOrder = guide.activeOrderRole !== null;
-
-            return (
-              <motion.div
-                key={`guide-${guide.id}`}
-                className="absolute"
-                style={{
-                  left: `${(guide.lng - 116) * 30 + 30}%`,
-                  top: `${(40 - guide.lat) * 30 + 20}%`,
-                }}
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ duration: 0.3, type: 'spring' }}
-              >
-                <Link to={`/user/${guide.id}`} className="relative group cursor-pointer block">
-                  <motion.div
-                    className={`w-10 h-10 rounded-full border-2 shadow-lg flex items-center justify-center text-white font-bold relative ${displayBg} ${
-                      guide.isFollowed
-                        ? 'border-yellow-400 ring-2 ring-yellow-400'
-                        : hasActiveOrder
-                        ? 'border-orange-400 ring-2 ring-orange-400'
-                        : 'border-white'
-                    }`}
-                    whileHover={{ scale: 1.2 }}
-                    whileTap={{ scale: 0.9 }}
-                    style={{
-                      transform: is3DMode ? 'translateZ(20px)' : 'none',
-                    }}
-                  >
-                    {displayIcon}
-                    {guide.isFollowed && (
-                      <div className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-400 rounded-full border-2 border-white flex items-center justify-center">
-                        <Star size={10} className="text-white fill-white" />
-                      </div>
-                    )}
-                    {!guide.isFollowed && hasActiveOrder && (
-                      <div className="absolute -top-1 -right-1 w-5 h-5 bg-orange-400 rounded-full border-2 border-white flex items-center justify-center text-xs">
-                        ⚡
-                      </div>
-                    )}
-                  </motion.div>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-white px-3 py-2 rounded-lg shadow-xl whitespace-nowrap z-10">
-                    <p className="font-medium flex items-center gap-1">
-                      {guide.name}
-                      {guide.isFollowed && <Star size={12} className="text-yellow-400 fill-yellow-400" />}
-                    </p>
-                    <p className="text-sm text-gray-600">{guide.location}</p>
-                    <p className="text-sm font-bold text-blue-600">¥{guide.price}/天</p>
-                    {hasActiveOrder && (
-                      <p className="text-xs text-orange-600 mt-1">
-                        {guide.activeOrderRole === 'guide' ? '导游服务中' : '旅行中'}
-                      </p>
-                    )}
-                  </div>
-                </Link>
-              </motion.div>
-            );
-          })}
-
-          {/* Traveler Markers */}
-          {activeLayers.includes('travelers') && travelers.map(traveler => {
-            const displayIcon = traveler.activeOrderRole === 'guide' ? '🧑‍✈️' : traveler.activeOrderRole === 'traveler' ? '😎' : '😎';
-            const displayBg = traveler.activeOrderRole === 'guide' ? 'bg-blue-600' : traveler.activeOrderRole === 'traveler' ? 'bg-green-600' : 'bg-green-600';
-            const hasActiveOrder = traveler.activeOrderRole !== null;
-
-            return (
-              <motion.div
-                key={`traveler-${traveler.id}`}
-                className="absolute"
-                style={{
-                  left: `${(traveler.lng - 116) * 30 + 32}%`,
-                  top: `${(40 - traveler.lat) * 30 + 22}%`,
-                }}
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ duration: 0.3, type: 'spring', delay: 0.1 }}
-              >
-                <Link to={`/user/${traveler.id}`} className="relative group cursor-pointer block">
-                  <motion.div
-                    className={`w-10 h-10 rounded-full border-2 shadow-lg flex items-center justify-center text-white font-bold relative ${displayBg} ${
-                      hasActiveOrder ? 'border-orange-400 ring-2 ring-orange-400' : 'border-white'
-                    }`}
-                    whileHover={{ scale: 1.2 }}
-                    whileTap={{ scale: 0.9 }}
-                    style={{
-                      transform: is3DMode ? 'translateZ(20px)' : 'none',
-                    }}
-                  >
-                    {displayIcon}
-                    {hasActiveOrder && (
-                      <div className="absolute -top-1 -right-1 w-5 h-5 bg-orange-400 rounded-full border-2 border-white flex items-center justify-center text-xs">
-                        ⚡
-                      </div>
-                    )}
-                  </motion.div>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-white px-3 py-2 rounded-lg shadow-xl whitespace-nowrap z-10">
-                    <p className="text-sm font-medium">{traveler.plan}</p>
-                    <p className="text-xs text-gray-600">{traveler.location}</p>
-                    {hasActiveOrder && (
-                      <p className="text-xs text-orange-600 mt-1">
-                        {traveler.activeOrderRole === 'guide' ? '导游服务中' : '旅行中'}
-                      </p>
-                    )}
-                  </div>
-                </Link>
-              </motion.div>
-            );
-          })}
-
-          {/* Heat Map Overlay */}
-          {activeLayers.includes('heat') && (
-            <motion.div
-              className="absolute inset-0 pointer-events-none"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <div className="absolute top-1/3 left-1/3 w-64 h-64 bg-red-500 rounded-full opacity-20 blur-3xl"></div>
-              <div className="absolute top-1/2 right-1/3 w-48 h-48 bg-orange-500 rounded-full opacity-15 blur-3xl"></div>
-            </motion.div>
-          )}
-        </div>
-
-        {/* City Labels */}
-        <div className="absolute top-1/4 left-1/4 text-sm font-medium text-gray-700">上海</div>
-        <div className="absolute top-1/3 left-1/2 text-sm font-medium text-gray-700">北京</div>
-        <div className="absolute top-2/3 left-1/3 text-sm font-medium text-gray-700">杭州</div>
-        <div className="absolute top-1/2 left-1/4 text-sm font-medium text-gray-700">苏州</div>
+        <div ref={mapElementRef} className="h-full w-full" />
       </motion.div>
 
       {/* 3D/2D Toggle */}
@@ -468,7 +401,7 @@ export function MapView() {
 
       {/* Legend */}
       <motion.div
-        className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-4 text-sm"
+        className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-4 text-sm z-20"
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: 0.3 }}
@@ -507,7 +440,7 @@ export function MapView() {
       {/* Route Info Panel */}
       {activeLayers.includes('routes') && (
         <motion.div
-          className="absolute bottom-4 right-4 bg-white rounded-lg shadow-lg p-4 max-w-xs"
+          className="absolute bottom-4 right-4 bg-white rounded-lg shadow-lg p-4 max-w-xs z-20"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
