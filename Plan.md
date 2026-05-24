@@ -2024,6 +2024,38 @@ Milestone 2 暂缓项与后续设计方案：
 - 保留现有 Figma 视觉方向，不重做 UI。
 - 补齐 loading、empty、error 状态。
 
+本 Milestone 已确认的产品规则：
+
+- 前端开发环境默认连接 `http://127.0.0.1:8000`，后续可通过 `VITE_API_BASE_URL` 覆盖。
+- MVP 阶段 access / refresh token 使用 `localStorage` 保存。
+- 已存在 `LoginPage.tsx`，M8 不重做登录页视觉，只把邮箱登录 / 注册接入真实 API。
+- TanStack Query 暂不接入：当前 M8 只需要少量启动期接口和手动刷新，使用轻量 API client 可满足；后续进入大量列表缓存、分页、后台数据表或复杂失效策略时再评估引入。
+- 现有 Figma 页面视觉不重做，只整理 API 接入层和全局状态管理。
+- M8 先接入 `/auth/me`、markets、profiles、orders、message threads、travel plans 的基础读取框架；页面内大规模 mock 内容替换留到 M9 / M10 按具体流程逐步完成。
+
+当前实现标注：
+
+- 已完成前端 API client，支持标准 envelope 解析、错误对象、Bearer token 注入和 access token 过期后的 refresh retry。
+- 已完成 localStorage token store，保存 `access_token` / `refresh_token`，支持清理登录状态。
+- 已完成前端接口类型：当前用户、角色、市场、profiles、travel plans、message threads、orders 和启动数据。
+- 已完成 App 顶层 auth bootstrap：存在 token 时自动调用 `/auth/me`、加载 markets、profiles、orders、message threads、travel plans，并放入 App context。
+- 已完成 LoginPage 的邮箱登录 / 注册真实 API 接入；第三方登录和手机号验证码登录不再伪造成功，显示暂缓提示。
+- 已补齐前端运行依赖 `react` / `react-dom`，并生成 `package-lock.json`；未安装 TanStack Query。
+- 已通过前端 production build、后端 pytest，并启动 Vite dev server 验证页面可访问。
+
+未完成 / 暂缓项：
+
+- TanStack Query 作为 `memory / 延后实现项` 暂缓；当前不引入新缓存框架，避免在 M8 扩大架构面。
+- 页面内部大批 mock 数据尚未全面替换；M8 只建立接口层和全局数据框架，M9 / M10 再按核心流程逐页接入。
+- Google / Apple / 微信登录真实流程、手机号验证码、忘记密码邮件发送仍依赖后端和第三方配置，暂缓。
+- 当前 role toggle 仍是前端本地切换，后续如果要和 `/me/role-switch` 强绑定，需要确认切换后的市场 scope 和页面跳转规则。
+
+后续 Milestone 依赖时的处理规则：
+
+- M9 接入发现、地图、计划和聊天前，必须先确认哪些页面字段来自真实 API，哪些继续保留 Figma mock 展示。
+- 如果页面需要列表缓存、分页、乐观更新或跨页面失效，先重新评估是否引入 TanStack Query。
+- 如果启用第三方登录或手机号验证码，必须先完成对应后端 provider / SMS 配置，不能在前端伪造登录成功。
+
 验收标准：
 
 - 前端可读取 `/auth/me`、当前市场、当前身份。

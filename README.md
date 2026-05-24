@@ -4,7 +4,7 @@ This repository follows `Plan.md`.
 
 ## Current Milestone
 
-Milestone 6 has a completed low-risk backend slice. The current implementation covers market-aware auth, profiles, travel plans, chat, and the non-payment order flow.
+Milestone 8 has a completed frontend foundation slice. The current implementation covers market-aware backend APIs plus the frontend API client, auth bootstrap, token storage, and initial data loading framework.
 
 Included:
 
@@ -55,6 +55,12 @@ Included:
 - Membership plan and subscription placeholder APIs.
 - Order dispute create/list APIs.
 - Admin order and dispute list APIs for admin/support roles.
+- Frontend API client with standard envelope/error handling.
+- Frontend localStorage access/refresh token storage.
+- Frontend auth bootstrap through `/api/v1/auth/me`.
+- Frontend startup loading for markets, profiles, travel plans, message threads, and orders.
+- LoginPage email login/register wired to real backend APIs.
+- Vite frontend build verified.
 
 Not implemented yet:
 
@@ -72,6 +78,8 @@ Not implemented yet:
 - Real Email/Push providers, templates, retry policy, and notification preferences.
 - Rich review media, moderation, rating aggregation, and review dispute workflow.
 - Email delivery for admin invitations.
+- Full replacement of Figma mock page data with live API data.
+- Real Google/Apple/WeChat login, phone SMS login, and forgot-password email flow.
 
 ## Backend Commands
 
@@ -162,4 +170,27 @@ If the schema was applied manually before Alembic versioning, mark it without re
 
 ```bash
 DATABASE_URL=postgresql+psycopg://trip:trip@127.0.0.1:5432/trip alembic stamp head
+```
+
+## Frontend Commands
+
+Install dependencies:
+
+```bash
+cd /Users/gecko/trip/frontend
+npm install --legacy-peer-deps
+```
+
+Run the frontend locally:
+
+```bash
+cd /Users/gecko/trip/frontend
+npm run dev -- --host 127.0.0.1
+```
+
+Build the frontend:
+
+```bash
+cd /Users/gecko/trip/frontend
+npm run build
 ```

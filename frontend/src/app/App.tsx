@@ -1,4 +1,4 @@
-import { useState, createContext, useContext } from 'react';
+import { useEffect, useState, createContext, useContext } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { MapPin, Users, Calendar, MessageCircle, User } from 'lucide-react';
 import { MapView } from './components/MapView';
@@ -13,17 +13,29 @@ import { ReviewsDetailPage } from './components/ReviewsDetailPage';
 import { OrdersPage } from './components/OrdersPage';
 import { MyReviewsPage } from './components/MyReviewsPage';
 import { CreditPage } from './components/CreditPage';
-
-type UserRole = 'traveler' | 'guide';
+import { LoginPage } from './components/LoginPage';
+import { apiClient, ApiError } from './api/client';
+import { clearTokens, readTokens, saveTokens } from './api/auth-store';
+import type { AppBootstrapData, AuthResponse, CurrentUser, UserRole } from './api/types';
 
 interface AppContextType {
   role: UserRole;
+  user: CurrentUser | null;
+  data: AppBootstrapData | null;
+  apiError: string | null;
+  refreshAppData: () => Promise<void>;
   toggleRole: () => void;
+  logout: () => void;
 }
 
 const AppContext = createContext<AppContextType>({
   role: 'traveler',
+  user: null,
+  data: null,
+  apiError: null,
+  refreshAppData: async () => {},
   toggleRole: () => {},
+  logout: () => {},
 });
 
 export const useApp = () => useContext(AppContext);
@@ -88,13 +100,72 @@ function AppContent() {
 
 export default function App() {
   const [role, setRole] = useState<UserRole>('traveler');
+  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [data, setData] = useState<AppBootstrapData | null>(null);
+  const [loading, setLoading] = useState(Boolean(readTokens()));
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  const refreshAppData = async () => {
+    const bootstrap = await apiClient.bootstrap();
+    setData(bootstrap);
+  };
+
+  useEffect(() => {
+    const bootstrapSession = async () => {
+      if (!readTokens()) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const [me] = await Promise.all([apiClient.me(), refreshAppData()]);
+        setUser(me);
+        const hasGuideRole = me.roles.some(item => item.code === 'guide');
+        setRole(hasGuideRole ? 'guide' : 'traveler');
+      } catch (error) {
+        clearTokens();
+        setUser(null);
+        setData(null);
+        setApiError(error instanceof ApiError ? error.message : '登录状态已失效，请重新登录');
+      } finally {
+        setLoading(false);
+      }
+    };
+    bootstrapSession();
+  }, []);
 
   const toggleRole = () => {
     setRole(prev => prev === 'traveler' ? 'guide' : 'traveler');
   };
 
+  const handleLogin = async (auth: AuthResponse) => {
+    saveTokens(auth.tokens);
+    setUser(auth.user);
+    setApiError(null);
+    const hasGuideRole = auth.user.roles.some(item => item.code === 'guide');
+    setRole(hasGuideRole ? 'guide' : 'traveler');
+    await refreshAppData();
+  };
+
+  const logout = () => {
+    clearTokens();
+    setUser(null);
+    setData(null);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <div className="text-sm text-white/70">正在连接 Trip Guide...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage onLogin={handleLogin} initialError={apiError} />;
+  }
+
   return (
-    <AppContext.Provider value={{ role, toggleRole }}>
+    <AppContext.Provider value={{ role, user, data, apiError, refreshAppData, toggleRole, logout }}>
       <Router>
         <AppContent />
       </Router>
