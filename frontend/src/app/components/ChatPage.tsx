@@ -11,6 +11,8 @@ interface Message {
   warning?: string;
 }
 
+const GREETING_LIMIT_MESSAGE = '在对方回复你之前，您最多只能发送这几条消息';
+
 export function ChatPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -40,6 +42,7 @@ export function ChatPage() {
   const [hasSentGreeting, setHasSentGreeting] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   const [showWarning, setShowWarning] = useState(true);
+  const [sendError, setSendError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const otherUser = {
@@ -81,12 +84,13 @@ export function ChatPage() {
       };
       setMessages([...messages, blockedMessage]);
       setMessage('');
+      setSendError(null);
       return;
     }
 
     // Check privacy rules
     if (!isMutualFollow && !hasReplied && hasSentGreeting) {
-      alert('对方未回复前，您只能发送一条问候语');
+      setSendError(GREETING_LIMIT_MESSAGE);
       return;
     }
 
@@ -99,6 +103,7 @@ export function ChatPage() {
 
     setMessages([...messages, newMessage]);
     setMessage('');
+    setSendError(null);
 
     if (!hasSentGreeting) {
       setHasSentGreeting(true);
@@ -243,14 +248,17 @@ export function ChatPage() {
           <div className="flex-1 relative">
             <textarea
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                if (sendError) setSendError(null);
+              }}
               onKeyPress={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   handleSend();
                 }
               }}
-              placeholder={canSendMessage() ? "输入消息..." : "对方回复后才可继续发送"}
+              placeholder={canSendMessage() ? "输入消息..." : GREETING_LIMIT_MESSAGE}
               disabled={!canSendMessage()}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
               rows={1}
@@ -264,6 +272,12 @@ export function ChatPage() {
             <Send size={20} />
           </button>
         </div>
+        {(sendError || !canSendMessage()) && (
+          <div className="mt-2 flex items-center gap-2 text-sm text-amber-700">
+            <Info size={16} />
+            <span>{sendError ?? GREETING_LIMIT_MESSAGE}</span>
+          </div>
+        )}
       </div>
     </div>
   );

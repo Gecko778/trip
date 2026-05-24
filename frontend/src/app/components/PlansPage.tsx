@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Plus, Minus, Calendar, MapPin, Users, DollarSign, Plane, Edit2, Trash2, CheckCircle, FileText, ArrowLeft, Save, Send } from 'lucide-react';
+import { Plus, Minus, Calendar, MapPin, Users, DollarSign, Plane, Edit2, Trash2, CheckCircle, FileText, ArrowLeft, Save, Send, AlertCircle } from 'lucide-react';
 import { useApp } from '../App';
+import { apiClient, ApiError } from '../api/client';
+import type { PlanVisibility } from '../api/types';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface PlanData {
-  id?: number;
+  id?: number | string;
   route: string;
   startDate: string;
   endDate: string;
@@ -13,6 +15,13 @@ interface PlanData {
   travelers: number;
   budget: string;
   visibility: string;
+  notes?: string;
+}
+
+interface PlanCardData extends PlanData {
+  id: number | string;
+  status: 'published' | 'draft' | string;
+  interestedGuides: number;
 }
 
 interface ServiceData {
@@ -27,9 +36,10 @@ interface ServiceData {
 }
 
 export function PlansPage() {
-  const { role } = useApp();
+  const { role, data, refreshAppData } = useApp();
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [editingPlan, setEditingPlan] = useState<number | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [editingPlan, setEditingPlan] = useState<number | string | null>(null);
   const [editingFromIcon, setEditingFromIcon] = useState<{ x: number; y: number } | null>(null);
   const [editingService, setEditingService] = useState<number | null>(null);
   const [editingServiceFromIcon, setEditingServiceFromIcon] = useState<{ x: number; y: number } | null>(null);
@@ -50,9 +60,10 @@ export function PlansPage() {
     travelers: 1,
     budget: '',
     visibility: 'all',
+    notes: '',
   });
 
-  const [myPlans, setMyPlans] = useState([
+  const [myPlans, setMyPlans] = useState<PlanCardData[]>([
     {
       id: 1,
       route: '上海 → 北京 → 上海',
@@ -120,11 +131,14 @@ export function PlansPage() {
       travelers: plan.travelers,
       budget: plan.budget,
       visibility: 'all',
+      notes: plan.notes ?? '',
     });
     setEditingPlan(plan.id);
+    setFormError(null);
   };
 
   const handleSaveEdit = () => {
+    if (!validatePlanForm()) return;
     setMyPlans(prev => prev.map(plan =>
       plan.id === editingPlan
         ? { ...plan, ...formData }
@@ -135,6 +149,7 @@ export function PlansPage() {
   };
 
   const handlePublishEdit = () => {
+    if (!validatePlanForm()) return;
     setMyPlans(prev => prev.map(plan =>
       plan.id === editingPlan
         ? { ...plan, ...formData, status: 'published' }
@@ -144,46 +159,14 @@ export function PlansPage() {
     setEditingFromIcon(null);
   };
 
-  const handleSaveDraft = () => {
-    const newPlan = {
-      id: Date.now(),
-      ...formData,
-      status: 'draft',
-      interestedGuides: 0,
-    };
-    setMyPlans(prev => [...prev, newPlan]);
-    setShowCreateForm(false);
-    setFormData({
-      route: '',
-      startDate: '',
-      endDate: '',
-      arrivalPoint: '',
-      needsPickup: false,
-      travelers: 1,
-      budget: '',
-      visibility: 'all',
-    });
+  const handleSaveDraft = async () => {
+    if (!validatePlanForm()) return;
+    await createPlan('draft');
   };
 
-  const handlePublish = () => {
-    const newPlan = {
-      id: Date.now(),
-      ...formData,
-      status: 'published',
-      interestedGuides: 0,
-    };
-    setMyPlans(prev => [...prev, newPlan]);
-    setShowCreateForm(false);
-    setFormData({
-      route: '',
-      startDate: '',
-      endDate: '',
-      arrivalPoint: '',
-      needsPickup: false,
-      travelers: 1,
-      budget: '',
-      visibility: 'all',
-    });
+  const handlePublish = async () => {
+    if (!validatePlanForm()) return;
+    await createPlan('published');
   };
 
   const resetForm = () => {
@@ -196,7 +179,99 @@ export function PlansPage() {
       travelers: 1,
       budget: '',
       visibility: 'all',
+      notes: '',
     });
+    setFormError(null);
+  };
+
+  const validatePlanForm = () => {
+    const requiredFields = [
+      formData.route.trim(),
+      formData.startDate,
+      formData.endDate,
+      String(formData.travelers || ''),
+      formData.budget.trim(),
+    ];
+    if (requiredFields.some(value => !value) || !Number.isFinite(formData.travelers)) {
+      setFormError('请填写旅行路线、到达日期、离开日期、人数和预算。接 / 送与备注可以暂不填写。');
+      return false;
+    }
+    if (formData.travelers < 1) {
+      setFormError('旅行人数必须至少为 1 人。');
+      return false;
+    }
+    if (formData.startDate > formData.endDate) {
+      setFormError('离开日期不能早于到达日期。');
+      return false;
+    }
+    setFormError(null);
+    return true;
+  };
+
+  const parseBudget = () => {
+    const values = formData.budget
+      .split(/[-–—~至]/)
+      .map(value => Number(value.replace(/[^\d.]/g, '')))
+      .filter(value => Number.isFinite(value));
+    return {
+      min: values[0] ?? null,
+      max: values[1] ?? values[0] ?? null,
+    };
+  };
+
+  const toBackendVisibility = (): PlanVisibility => {
+    if (formData.visibility === 'guides') return 'guides_only';
+    if (formData.visibility === 'travelers') return 'travelers_only';
+    if (formData.visibility === 'private') return 'private';
+    return 'public';
+  };
+
+  const createPlan = async (status: 'draft' | 'published') => {
+    const selectedMarket = data?.selectedMarket;
+    if (!selectedMarket) {
+      setFormError('当前市场尚未加载，无法保存旅行计划。');
+      return;
+    }
+    const budget = parseBudget();
+    try {
+      const createdPlan = await apiClient.createTravelPlan(selectedMarket.id, {
+        country_code: selectedMarket.default_country_code ?? 'CN',
+        arrival_date: formData.startDate,
+        arrival_region_id: null,
+        needs_pickup: formData.needsPickup,
+        traveler_count: formData.travelers,
+        budget_min_amount: budget.min,
+        budget_max_amount: budget.max,
+        budget_currency: selectedMarket.default_currency ?? 'CNY',
+        visibility: toBackendVisibility(),
+        title: formData.route.trim(),
+        notes: formData.notes?.trim() || null,
+      });
+      await apiClient.createRouteNode(createdPlan.id, {
+        region_id: null,
+        sequence: 1,
+        planned_start_at: `${formData.startDate}T00:00:00`,
+        planned_end_at: `${formData.endDate}T23:59:59`,
+        notes: formData.route.trim(),
+      });
+      if (status === 'published') {
+        await apiClient.publishTravelPlan(createdPlan.id);
+      }
+      setMyPlans(prev => [
+        ...prev,
+        {
+          id: createdPlan.id,
+          ...formData,
+          status,
+          interestedGuides: 0,
+        },
+      ]);
+      setShowCreateForm(false);
+      resetForm();
+      await refreshAppData();
+    } catch (error) {
+      setFormError(error instanceof ApiError ? error.message : '旅行计划保存失败，请稍后重试。');
+    }
   };
 
   const handleEditService = (service: ServiceData, event: React.MouseEvent) => {
@@ -262,14 +337,13 @@ export function PlansPage() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-2">到达地点</label>
+        <label className="block text-sm font-medium mb-2">接 / 送地点（选填）</label>
         <input
           type="text"
           placeholder="例: 上海浦东机场"
           value={formData.arrivalPoint}
           onChange={(e) => setFormData({ ...formData, arrivalPoint: e.target.value })}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          required
         />
       </div>
 
@@ -310,6 +384,17 @@ export function PlansPage() {
       </div>
 
       <div>
+        <label className="block text-sm font-medium mb-2">备注（选填）</label>
+        <textarea
+          placeholder="例: 希望安排亲子友好路线"
+          value={formData.notes ?? ''}
+          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          rows={3}
+        />
+      </div>
+
+      <div>
         <label className="block text-sm font-medium mb-2">可见范围</label>
         <select
           value={formData.visibility}
@@ -335,6 +420,7 @@ export function PlansPage() {
               onClick={() => {
                 setShowCreateForm(!showCreateForm);
                 if (showCreateForm) resetForm();
+                if (!showCreateForm) setFormError(null);
               }}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -357,6 +443,12 @@ export function PlansPage() {
               >
                 <h2 className="text-xl font-bold mb-4">创建旅行计划</h2>
                 <FormFields />
+                {formError && (
+                  <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
+                    <span>{formError}</span>
+                  </div>
+                )}
 
                 <div className="flex gap-3 pt-6 mt-6 border-t border-gray-200">
                   <button
@@ -532,6 +624,7 @@ export function PlansPage() {
                   onClick={() => {
                     setEditingPlan(null);
                     setEditingFromIcon(null);
+                    setFormError(null);
                   }}
                 />
 
@@ -575,6 +668,7 @@ export function PlansPage() {
                       onClick={() => {
                         setEditingPlan(null);
                         setEditingFromIcon(null);
+                        setFormError(null);
                       }}
                       className="p-2 -ml-2 hover:bg-gray-100 rounded-lg"
                     >
@@ -587,6 +681,12 @@ export function PlansPage() {
                   {/* Scrollable Form Content */}
                   <div className="overflow-y-auto flex-1 px-6 py-4">
                     <FormFields />
+                    {formError && (
+                      <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                        <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
+                        <span>{formError}</span>
+                      </div>
+                    )}
 
                     {/* Action Buttons - Inside scrollable area */}
                     <div className="flex gap-3 pt-6 mt-6 border-t border-gray-200">

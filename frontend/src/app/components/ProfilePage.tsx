@@ -10,8 +10,8 @@ export function ProfilePage() {
 
   const handleRoleSwitch = () => {
     setIsAnimating(true);
-    setTimeout(() => {
-      toggleRole();
+    setTimeout(async () => {
+      await toggleRole();
       setTimeout(() => setIsAnimating(false), 600);
     }, 300);
   };

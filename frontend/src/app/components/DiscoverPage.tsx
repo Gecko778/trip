@@ -8,7 +8,7 @@ type LayoutMode = 'list' | 'grid';
 type ContentType = 'guides' | 'travelers';
 
 export function DiscoverPage() {
-  const { role } = useApp();
+  const { role, data } = useApp();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -29,7 +29,7 @@ export function DiscoverPage() {
     return flagMap[lang] || '🌐';
   };
 
-  const guides = [
+  const mockGuides = [
     {
       id: 1,
       name: '张伟',
@@ -251,7 +251,7 @@ export function DiscoverPage() {
     },
   ];
 
-  const travelPlans = [
+  const mockTravelPlans = [
     {
       id: 1,
       traveler: '陈晓',
@@ -309,6 +309,50 @@ export function DiscoverPage() {
       status: 'published',
     },
   ];
+
+  const apiGuides = (data?.guides ?? []).map(guide => ({
+    id: guide.id,
+    name: `导游 ${guide.id.slice(0, 4)}`,
+    location: `地区 ${guide.home_region_id.slice(0, 4)}`,
+    serviceAreas: guide.service_region_ids.length
+      ? guide.service_region_ids.map(regionId => `地区 ${regionId.slice(0, 4)}`)
+      : [`地区 ${guide.home_region_id.slice(0, 4)}`],
+    pricePerDay: Number(guide.daily_price_amount),
+    rating: Number(guide.rating ?? 0),
+    reviews: guide.completed_order_count,
+    verified: guide.verification_status === 'approved',
+    airportPickup: guide.offers_pickup,
+    gender: guide.gender,
+    age: guide.birth_year ? new Date().getFullYear() - guide.birth_year : undefined,
+    languages: guide.language_tags.length ? guide.language_tags : ['English'],
+    avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${guide.user_id}`,
+    completedTrips: guide.completed_order_count,
+  }));
+  const guides = apiGuides.length > 0 ? apiGuides : mockGuides;
+
+  const apiTravelPlans = (data?.travelPlans ?? []).map(plan => {
+    const routeNodes = plan.route_nodes ?? [];
+    const route = routeNodes.length
+      ? routeNodes.map(node => `城市${node.sequence}`).join(' → ')
+      : plan.title || '未命名路线';
+    const firstNode = routeNodes[0];
+    const lastNode = routeNodes[routeNodes.length - 1];
+    return {
+      id: plan.id,
+      traveler: `旅行者 ${plan.traveler_user_id.slice(0, 4)}`,
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${plan.traveler_user_id}`,
+      nationality: plan.country_code === 'CN' ? '🇨🇳' : '🌐',
+      route,
+      startDate: firstNode?.planned_start_at?.slice(0, 10) ?? plan.arrival_date,
+      endDate: lastNode?.planned_end_at?.slice(0, 10) ?? plan.arrival_date,
+      arrivalPoint: plan.arrival_region_id ? `地区 ${plan.arrival_region_id.slice(0, 4)}` : '待确认',
+      needsPickup: Boolean(plan.needs_pickup),
+      budget: [plan.budget_min_amount, plan.budget_max_amount].filter(Boolean).join('-') || '待确认',
+      travelers: plan.traveler_count ?? 1,
+      status: plan.status,
+    };
+  });
+  const travelPlans = apiTravelPlans.length > 0 ? apiTravelPlans : mockTravelPlans;
 
   return (
     <div className="max-w-screen-xl mx-auto">

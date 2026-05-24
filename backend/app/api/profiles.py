@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -8,6 +8,7 @@ from app.core.permissions import get_current_user, require_permission
 from app.core.responses import envelope
 from app.db.deps import get_db_session
 from app.repositories import auth as auth_repository
+from app.repositories import markets as market_repository
 from app.repositories import profiles as profile_repository
 from app.schemas.profiles import (
     GuideProfileCreateRequest,
@@ -158,6 +159,30 @@ def create_my_guide_profile(
         session.rollback()
         raise HTTPException(status_code=400, detail="Invalid guide profile reference") from exc
     return envelope(data=profile, trace_id=request.state.trace_id)
+
+
+@router.get("/markets/{market_id}/guides")
+def list_market_guides(
+    market_id: UUID,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    _current_user: dict = Depends(get_current_user),
+    session: Session = Depends(get_db_session),
+) -> dict:
+    if market_repository.get_market(session, market_id) is None:
+        raise HTTPException(status_code=404, detail="Market not found")
+    guides = profile_repository.list_market_guide_profiles(
+        session,
+        market_id=market_id,
+        limit=limit,
+        offset=offset,
+    )
+    return envelope(
+        data=guides,
+        meta={"limit": limit, "offset": offset},
+        trace_id=request.state.trace_id,
+    )
 
 
 @router.get("/guides/{guide_profile_id}")

@@ -8,7 +8,7 @@ type MapLayer = 'heat' | 'guides' | 'travelers' | 'routes';
 type RouteStatus = 'ongoing' | 'upcoming' | 'historical';
 
 export function MapView() {
-  const { role } = useApp();
+  const { role, data } = useApp();
   const [activeLayers, setActiveLayers] = useState<MapLayer[]>(['guides', 'routes']);
   const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [is3DMode, setIs3DMode] = useState(false);
@@ -28,6 +28,14 @@ export function MapView() {
   };
 
   const followedUserIds = [1, 2]; // IDs of followed users
+  const cityCoordinates: Record<string, { lat: number; lng: number }> = {
+    上海: { lat: 31.2304, lng: 121.4737 },
+    北京: { lat: 39.9042, lng: 116.4074 },
+    杭州: { lat: 30.2741, lng: 120.1551 },
+    苏州: { lat: 31.2989, lng: 120.5853 },
+    南京: { lat: 32.0603, lng: 118.7969 },
+    西安: { lat: 34.3416, lng: 108.9398 },
+  };
 
   const guides = [
     { id: 1, name: '张伟', location: '上海', lat: 31.2304, lng: 121.4737, price: 1000, isFollowed: true, activeOrderRole: 'guide' as 'guide' | 'traveler' | null },
@@ -42,7 +50,7 @@ export function MapView() {
   ];
 
   // Travel routes for travelers
-  const travelRoutes = [
+  const mockTravelRoutes = [
     {
       id: 1,
       name: '上海-北京环线',
@@ -113,7 +121,42 @@ export function MapView() {
     },
   ];
 
-  const currentRoutes = role === 'traveler' ? travelRoutes : guideRoutes;
+  const apiTravelRoutes = (data?.travelPlans ?? []).map((plan, index) => {
+    const name = plan.title?.trim() || `旅行计划 ${index + 1}`;
+    const routeCities = name
+      .split(/[→\-—>]/)
+      .map(city => city.trim())
+      .filter(Boolean);
+    const points = routeCities
+      .map(city => cityCoordinates[city])
+      .filter((point): point is { lat: number; lng: number } => Boolean(point));
+    const fallbackPoints = [
+      cityCoordinates.上海,
+      index % 2 === 0 ? cityCoordinates.北京 : cityCoordinates.杭州,
+    ];
+    const arrivalTime = new Date(plan.arrival_date).getTime();
+    const status: RouteStatus =
+      plan.status === 'completed'
+        ? 'historical'
+        : Number.isFinite(arrivalTime) && arrivalTime <= Date.now()
+          ? 'ongoing'
+          : 'upcoming';
+
+    return {
+      id: plan.id,
+      name,
+      status,
+      points: points.length >= 2 ? points : fallbackPoints,
+      color: status === 'ongoing' ? 'blue' : status === 'upcoming' ? 'green' : 'gray',
+      travelers: plan.traveler_count,
+    };
+  });
+
+  const currentRoutes = apiTravelRoutes.length > 0
+    ? apiTravelRoutes
+    : role === 'traveler'
+      ? mockTravelRoutes
+      : guideRoutes;
 
   const getRouteColor = (status: RouteStatus) => {
     switch (status) {

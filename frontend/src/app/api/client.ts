@@ -4,11 +4,14 @@ import type {
   AppBootstrapData,
   AuthResponse,
   CurrentUser,
+  GuideProfile,
   Market,
   MessageThread,
+  RouteNodeCreatePayload,
   ProfileBundle,
   ServiceOrder,
   TravelPlan,
+  TravelPlanCreatePayload,
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000';
@@ -109,8 +112,34 @@ export const apiClient = {
   profiles() {
     return request<ProfileBundle>('/api/v1/me/profiles');
   },
+  switchRole(role: 'traveler' | 'guide', marketId?: string | null) {
+    return request<{ active_profile: unknown; user: CurrentUser }>('/api/v1/me/role-switch', {
+      method: 'POST',
+      body: JSON.stringify({ role, market_id: marketId ?? null }),
+    });
+  },
+  guides(marketId: string) {
+    return request<GuideProfile[]>(`/api/v1/markets/${marketId}/guides`);
+  },
   travelPlans(marketId: string) {
     return request<TravelPlan[]>(`/api/v1/markets/${marketId}/travel-plans`);
+  },
+  createTravelPlan(marketId: string, payload: TravelPlanCreatePayload) {
+    return request<TravelPlan>(`/api/v1/markets/${marketId}/travel-plans`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+  publishTravelPlan(planId: string) {
+    return request<TravelPlan>(`/api/v1/travel-plans/${planId}/publish`, {
+      method: 'POST',
+    });
+  },
+  createRouteNode(planId: string, payload: RouteNodeCreatePayload) {
+    return request<TravelPlan['route_nodes']>(`/api/v1/travel-plans/${planId}/route-nodes`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
   messageThreads(marketId: string) {
     return request<MessageThread[]>(`/api/v1/markets/${marketId}/message-threads`);
@@ -126,17 +155,19 @@ export const apiClient = {
         markets,
         selectedMarket,
         profiles: null,
+        guides: [],
         travelPlans: [],
         messageThreads: [],
         orders: [],
       };
     }
-    const [profiles, travelPlans, messageThreads, orders] = await Promise.all([
+    const [profiles, guides, travelPlans, messageThreads, orders] = await Promise.all([
       apiClient.profiles().catch(() => null),
+      apiClient.guides(selectedMarket.id).catch(() => []),
       apiClient.travelPlans(selectedMarket.id).catch(() => []),
       apiClient.messageThreads(selectedMarket.id).catch(() => []),
       apiClient.orders(selectedMarket.id).catch(() => []),
     ]);
-    return { markets, selectedMarket, profiles, travelPlans, messageThreads, orders };
+    return { markets, selectedMarket, profiles, guides, travelPlans, messageThreads, orders };
   },
 };

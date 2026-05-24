@@ -24,7 +24,7 @@ interface AppContextType {
   data: AppBootstrapData | null;
   apiError: string | null;
   refreshAppData: () => Promise<void>;
-  toggleRole: () => void;
+  toggleRole: () => Promise<void>;
   logout: () => void;
 }
 
@@ -34,7 +34,7 @@ const AppContext = createContext<AppContextType>({
   data: null,
   apiError: null,
   refreshAppData: async () => {},
-  toggleRole: () => {},
+  toggleRole: async () => {},
   logout: () => {},
 });
 
@@ -133,8 +133,19 @@ export default function App() {
     bootstrapSession();
   }, []);
 
-  const toggleRole = () => {
-    setRole(prev => prev === 'traveler' ? 'guide' : 'traveler');
+  const toggleRole = async () => {
+    const nextRole = role === 'traveler' ? 'guide' : 'traveler';
+    const marketId = data?.selectedMarket?.id ?? null;
+    try {
+      const result = await apiClient.switchRole(nextRole, marketId);
+      setUser(result.user);
+      setRole(nextRole);
+      setApiError(null);
+      await refreshAppData();
+    } catch (error) {
+      setApiError(error instanceof ApiError ? error.message : '身份切换失败，请稍后重试');
+      setRole(nextRole);
+    }
   };
 
   const handleLogin = async (auth: AuthResponse) => {

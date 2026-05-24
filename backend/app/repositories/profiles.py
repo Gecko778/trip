@@ -245,6 +245,28 @@ def list_guide_profiles(session: Session, user_id: UUID) -> list[dict[str, Any]]
     return [get_guide_profile(session, row[0]) for row in rows]
 
 
+def list_market_guide_profiles(
+    session: Session,
+    *,
+    market_id: UUID,
+    limit: int,
+    offset: int,
+) -> list[dict[str, Any]]:
+    rows = session.execute(
+        text(
+            """
+            SELECT id
+            FROM guide_profiles
+            WHERE market_id = :market_id AND deleted_at IS NULL
+            ORDER BY rating DESC NULLS LAST, created_at DESC
+            LIMIT :limit OFFSET :offset
+            """
+        ),
+        {"market_id": market_id, "limit": limit, "offset": offset},
+    )
+    return [get_guide_profile(session, row[0]) for row in rows]
+
+
 def update_guide_profile(
     session: Session,
     guide_profile_id: UUID,
