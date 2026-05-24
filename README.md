@@ -48,6 +48,13 @@ Included:
 - Order completion and completed-order review APIs.
 - Database notification list/read APIs.
 - No-op Email/Push notification delivery interface placeholders.
+- Percentage and fixed-fee commission policy APIs.
+- Order commission preview with composable commission strategies.
+- Payment record placeholder API without real provider calls.
+- Payout account draft/list APIs without real account verification.
+- Membership plan and subscription placeholder APIs.
+- Order dispute create/list APIs.
+- Admin order and dispute list APIs for admin/support roles.
 
 Not implemented yet:
 
@@ -58,8 +65,10 @@ Not implemented yet:
 - Map heat layers, recommendation content APIs, and search ranking algorithms.
 - Contact-risk detection, report handling, risk review work items, attachments, read receipts, message edit/delete, and real-time chat transport.
 - Real payment, exchange-rate conversion, commission, refund, dispute, and settlement flows.
+- Real payment provider integration, split payments, payout execution, and KYC/KYB checks.
 - Concrete cancellation penalty amount, reputation impact, exemption, and appeal rules.
 - Agreement breach marking, reputation impact, penalties, appeal, and manual review rules.
+- Dispute arbitration, evidence standard, refund execution, and legal workflow rules.
 - Real Email/Push providers, templates, retry policy, and notification preferences.
 - Rich review media, moderation, rating aggregation, and review dispute workflow.
 - Email delivery for admin invitations.

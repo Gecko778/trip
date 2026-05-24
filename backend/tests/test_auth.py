@@ -332,3 +332,67 @@ def test_notifications_require_authentication() -> None:
 
     assert response.status_code == 401
     assert response.json()["error"]["message"] == "Missing bearer token"
+
+
+def test_commission_policy_create_requires_authentication() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/markets/00000000-0000-0000-0000-000000000100/commission-policies/percentage",
+        json={"commission_rate": "0.10"},
+        headers={"x-trace-id": "commission-policy-no-auth"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message"] == "Missing bearer token"
+
+
+def test_payment_placeholder_requires_authentication() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/orders/00000000-0000-0000-0000-000000000001/payment-records/placeholder",
+        json={},
+        headers={"x-trace-id": "payment-placeholder-no-auth"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message"] == "Missing bearer token"
+
+
+def test_payout_account_create_requires_authentication() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/markets/00000000-0000-0000-0000-000000000100/me/payout-accounts",
+        json={"account_type": "manual", "country_code": "CN", "currency_code": "CNY"},
+        headers={"x-trace-id": "payout-account-no-auth"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message"] == "Missing bearer token"
+
+
+def test_dispute_create_requires_authentication() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/orders/00000000-0000-0000-0000-000000000001/disputes",
+        json={"dispute_type": "service_issue"},
+        headers={"x-trace-id": "dispute-no-auth"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message"] == "Missing bearer token"
+
+
+def test_admin_order_list_requires_authentication() -> None:
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/v1/admin/markets/00000000-0000-0000-0000-000000000100/orders",
+        headers={"x-trace-id": "admin-orders-no-auth"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message"] == "Missing bearer token"
