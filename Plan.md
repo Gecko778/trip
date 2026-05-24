@@ -2210,6 +2210,8 @@ Milestone 2 暂缓项与后续设计方案：
 - 已新增 `scripts/local_ci.sh`，串联后端 pytest、前端 build、Alembic 迁移、demo seed 和 E2E smoke。
 - 已整理 Docker Compose，包含 PostgreSQL、backend、frontend、Redis、MinIO；backend 容器启动时执行迁移和 demo seed。
 - 已修正 backend / frontend Dockerfile 的依赖安装方式，并补充 Docker ignore 文件。
+- 已修复 Docker Compose 的 backend 挂载冲突：不再把 `./backend` 整体挂到 `/app` 后再嵌套挂载根目录 `alembic.ini`，避免 Docker Desktop 把挂载目标错误解析到 `backend/alembic.ini`。
+- 已验证 `docker compose up --build -d` 可以完整构建并启动 PostgreSQL、Redis、MinIO、backend、frontend；前端 `http://127.0.0.1:5173/` 返回 200，后端 `GET http://127.0.0.1:8000/health` 返回成功。
 - 已验证 `scripts/local_ci.sh` 通过：后端 pytest、前端 build、迁移、demo seed、E2E smoke 全部成功。
 
 未完成 / 暂缓项：
@@ -2217,7 +2219,6 @@ Milestone 2 暂缓项与后续设计方案：
 - Playwright 浏览器级 E2E 暂缓；当前 M11 smoke 覆盖 API 主路径，后续如要验证真实 UI 点击流，需要再引入 Playwright 和浏览器测试数据隔离策略。
 - GitHub Actions 暂缓；当前只保留本地 CI 脚本。
 - Redis / MinIO 已接入 Compose，但业务侧队列、缓存、对象上传、生命周期和访问权限仍按前序 Milestone 暂缓项处理。
-- Compose 镜像构建和全量容器启动仍需在本地 Docker 环境中按需验证；当前已验证 `docker compose config --quiet`，尚未执行完整 `docker compose up --build`。
 
 后续 Milestone 依赖时的处理规则：
 
