@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, Star, TrendingUp, TrendingDown, Filter, Search, X, Send } from 'lucide-react';
 import { useApp } from '../App';
+import { apiClient, ApiError } from '../api/client';
+import type { ServiceOrder } from '../api/types';
 import { motion, AnimatePresence } from 'motion/react';
 
 type OrderStatus = 'all' | 'ongoing' | 'completed' | 'cancelled';
@@ -286,14 +288,50 @@ function RatingModal({ order, onClose, onSubmit }: RatingModalProps) {
 }
 
 export function OrdersPage() {
-  const { role } = useApp();
+  const { role, user, data, refreshAppData } = useApp();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<OrderStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [ratingOrder, setRatingOrder] = useState<Order | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>(role === 'guide' ? ORDERS : TRAVELER_ORDERS);
 
-  const allOrders = role === 'guide' ? orders : orders;
+  const mapApiOrder = (order: ServiceOrder): Order => {
+    const status = order.status === 'completed'
+      ? 'completed'
+      : order.status === 'cancelled'
+        ? 'cancelled'
+        : 'ongoing';
+    const start = order.service_start_date ?? order.created_at?.slice(0, 10) ?? '待确认';
+    const end = order.service_end_date ?? start;
+    const startTime = new Date(start).getTime();
+    const endTime = new Date(end).getTime();
+    const days = Number.isFinite(startTime) && Number.isFinite(endTime)
+      ? Math.max(1, Math.round((endTime - startTime) / 86400000) + 1)
+      : 1;
+    const route = typeof order.itinerary_json?.route === 'string'
+      ? order.itinerary_json.route
+      : `订单 ${order.id.slice(0, 8)}`;
+    const isGuideIncome = user?.id === order.guide_user_id;
+    const counterpartId = isGuideIncome ? order.traveler_user_id : order.guide_user_id;
+    return {
+      id: order.id,
+      route,
+      counterpart: `${isGuideIncome ? '旅行者' : '导游'} ${counterpartId.slice(0, 4)}`,
+      counterpartAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${counterpartId}`,
+      date: start,
+      endDate: end,
+      amount: Number(order.guide_price_amount),
+      status,
+      type: isGuideIncome ? 'income' : 'expense',
+      travelers: order.traveler_count ?? 1,
+      days,
+      rated: false,
+    };
+  };
+
+  const apiOrders = (data?.orders ?? []).map(mapApiOrder);
+  const allOrders = apiOrders.length > 0 ? apiOrders : orders;
 
   const filtered = allOrders.filter(o => {
     const matchTab = activeTab === 'all' || o.status === activeTab;
@@ -305,11 +343,22 @@ export function OrdersPage() {
   const ongoingCount = allOrders.filter(o => o.status === 'ongoing').length;
   const completedCount = allOrders.filter(o => o.status === 'completed').length;
 
-  const handleRatingSubmit = (orderId: string, rating: number, review: string) => {
-    setOrders(prev => prev.map(o =>
-      o.id === orderId ? { ...o, rated: true, rating, review } : o
-    ));
-    setRatingOrder(null);
+  const handleRatingSubmit = async (orderId: string, rating: number, review: string) => {
+    setActionError(null);
+    try {
+      await apiClient.createReview(orderId, rating, review);
+      await refreshAppData();
+    } catch (error) {
+      if (error instanceof ApiError && error.status !== 422 && error.status !== 404) {
+        setActionError(error.message);
+        return;
+      }
+    } finally {
+      setOrders(prev => prev.map(o =>
+        o.id === orderId ? { ...o, rated: true, rating, review } : o
+      ));
+      setRatingOrder(null);
+    }
   };
 
   return (
@@ -364,6 +413,13 @@ export function OrdersPage() {
           )}
         </div>
       </div>
+
+      {/* Tabs */}
+      {actionError && (
+        <div className="mx-4 mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {actionError}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex px-4 gap-2 mb-4 overflow-x-auto">
@@ -477,7 +533,10 @@ export function OrdersPage() {
                         查看进度
                       </button>
                     )}
-                    <button className="flex items-center justify-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+                    <button
+                      onClick={() => navigate(`/order/${order.id}`)}
+                      className="flex items-center justify-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
                       详情
                       <ChevronRight size={15} />
                     </button>

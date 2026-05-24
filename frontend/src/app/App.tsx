@@ -14,6 +14,8 @@ import { OrdersPage } from './components/OrdersPage';
 import { MyReviewsPage } from './components/MyReviewsPage';
 import { CreditPage } from './components/CreditPage';
 import { LoginPage } from './components/LoginPage';
+import { VerificationPage } from './components/VerificationPage';
+import { AdminPage } from './components/AdminPage';
 import { apiClient, ApiError } from './api/client';
 import { clearTokens, readTokens, saveTokens } from './api/auth-store';
 import type { AppBootstrapData, AuthResponse, CurrentUser, UserRole } from './api/types';
@@ -92,6 +94,9 @@ function AppContent() {
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/reviews" element={<MyReviewsPage />} />
         <Route path="/credit" element={<CreditPage />} />
+        <Route path="/verification" element={<VerificationPage />} />
+        <Route path="/notifications" element={<MessagesPage />} />
+        <Route path="/admin" element={<AdminPage />} />
       </Routes>
       <BottomNav />
     </div>

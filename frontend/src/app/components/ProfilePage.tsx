@@ -5,8 +5,11 @@ import { useApp } from '../App';
 import { motion, AnimatePresence } from 'motion/react';
 
 export function ProfilePage() {
-  const { role, toggleRole } = useApp();
+  const { role, user, toggleRole } = useApp();
   const [isAnimating, setIsAnimating] = useState(false);
+  const hasAdminEntry = user?.roles.some(item =>
+    ['sys_admin', 'market_admin', 'support_agent', 'guide_reviewer', 'risk_reviewer'].includes(item.code)
+  );
 
   const handleRoleSwitch = () => {
     setIsAnimating(true);
@@ -65,6 +68,14 @@ export function ProfilePage() {
       ],
     },
   ];
+  if (hasAdminEntry) {
+    menuItems.splice(2, 0, {
+      section: '后台',
+      items: [
+        { icon: Shield, label: '后台基础', path: '/admin' },
+      ],
+    });
+  }
 
   return (
     <div className="max-w-screen-xl mx-auto pb-4">

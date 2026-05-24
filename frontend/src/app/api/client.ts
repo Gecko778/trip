@@ -4,11 +4,16 @@ import type {
   AppBootstrapData,
   AuthResponse,
   CurrentUser,
+  AnonymousAgreement,
+  DisputeCase,
   GuideProfile,
+  GuideVerification,
   Market,
   MessageThread,
+  NotificationRecord,
   RouteNodeCreatePayload,
   ProfileBundle,
+  ReviewRecord,
   ServiceOrder,
   TravelPlan,
   TravelPlanCreatePayload,
@@ -147,6 +152,72 @@ export const apiClient = {
   orders(marketId: string) {
     return request<ServiceOrder[]>(`/api/v1/markets/${marketId}/orders`);
   },
+  order(orderId: string) {
+    return request<ServiceOrder>(`/api/v1/orders/${orderId}`);
+  },
+  travelerConfirmOrder(orderId: string) {
+    return request<ServiceOrder>(`/api/v1/orders/${orderId}/traveler-confirm`, {
+      method: 'POST',
+    });
+  },
+  guideConfirmOrder(orderId: string) {
+    return request<ServiceOrder>(`/api/v1/orders/${orderId}/guide-confirm`, {
+      method: 'POST',
+    });
+  },
+  completeOrder(orderId: string) {
+    return request<ServiceOrder>(`/api/v1/orders/${orderId}/complete`, {
+      method: 'POST',
+    });
+  },
+  agreement(orderId: string) {
+    return request<AnonymousAgreement>(`/api/v1/orders/${orderId}/agreement`);
+  },
+  signAgreement(orderId: string) {
+    return request<AnonymousAgreement>(`/api/v1/orders/${orderId}/agreement/sign`, {
+      method: 'POST',
+    });
+  },
+  reviews(orderId: string) {
+    return request<ReviewRecord[]>(`/api/v1/orders/${orderId}/reviews`);
+  },
+  createReview(orderId: string, rating: number, body: string, dimensions: Record<string, unknown> = {}) {
+    return request<ReviewRecord>(`/api/v1/orders/${orderId}/reviews`, {
+      method: 'POST',
+      body: JSON.stringify({ rating, body: body || null, dimensions_json: dimensions }),
+    });
+  },
+  notifications() {
+    return request<NotificationRecord[]>('/api/v1/me/notifications');
+  },
+  markNotificationRead(notificationId: string) {
+    return request<NotificationRecord>(`/api/v1/me/notifications/${notificationId}/read`, {
+      method: 'POST',
+    });
+  },
+  submitGuideVerification(guideProfileId: string) {
+    return request<GuideVerification>(`/api/v1/guides/${guideProfileId}/verification`, {
+      method: 'POST',
+    });
+  },
+  guideVerification(guideProfileId: string) {
+    return request<GuideVerification>(`/api/v1/guides/${guideProfileId}/verification`);
+  },
+  reviewGuideVerification(guideProfileId: string, verificationId: string, status: 'approved' | 'rejected', failureReason?: string) {
+    return request<GuideVerification>(`/api/v1/guides/${guideProfileId}/verification/${verificationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, failure_reason: failureReason ?? null }),
+    });
+  },
+  adminOrders(marketId: string) {
+    return request<ServiceOrder[]>(`/api/v1/admin/markets/${marketId}/orders`);
+  },
+  adminDisputes(marketId: string) {
+    return request<DisputeCase[]>(`/api/v1/admin/markets/${marketId}/disputes`);
+  },
+  adminGuideVerifications(marketId: string) {
+    return request<GuideVerification[]>(`/api/v1/admin/markets/${marketId}/guide-verifications`);
+  },
   async bootstrap(): Promise<AppBootstrapData> {
     const markets = await apiClient.markets();
     const selectedMarket = markets[0] ?? null;
@@ -159,15 +230,17 @@ export const apiClient = {
         travelPlans: [],
         messageThreads: [],
         orders: [],
+        notifications: [],
       };
     }
-    const [profiles, guides, travelPlans, messageThreads, orders] = await Promise.all([
+    const [profiles, guides, travelPlans, messageThreads, orders, notifications] = await Promise.all([
       apiClient.profiles().catch(() => null),
       apiClient.guides(selectedMarket.id).catch(() => []),
       apiClient.travelPlans(selectedMarket.id).catch(() => []),
       apiClient.messageThreads(selectedMarket.id).catch(() => []),
       apiClient.orders(selectedMarket.id).catch(() => []),
+      apiClient.notifications().catch(() => []),
     ]);
-    return { markets, selectedMarket, profiles, guides, travelPlans, messageThreads, orders };
+    return { markets, selectedMarket, profiles, guides, travelPlans, messageThreads, orders, notifications };
   },
 };

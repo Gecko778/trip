@@ -267,6 +267,32 @@ def get_guide_verification(
     return envelope(data=verification, trace_id=request.state.trace_id)
 
 
+@router.get("/admin/markets/{market_id}/guide-verifications")
+def list_market_guide_verifications(
+    market_id: UUID,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    current_user: dict = Depends(require_permission("guide.verification:review")),
+    session: Session = Depends(get_db_session),
+) -> dict:
+    if market_repository.get_market(session, market_id) is None:
+        raise HTTPException(status_code=404, detail="Market not found")
+    if not _can_review_market(current_user, market_id):
+        raise HTTPException(status_code=403, detail="Cannot review this market")
+    verifications = profile_repository.list_market_guide_verifications(
+        session,
+        market_id=market_id,
+        limit=limit,
+        offset=offset,
+    )
+    return envelope(
+        data=verifications,
+        meta={"limit": limit, "offset": offset},
+        trace_id=request.state.trace_id,
+    )
+
+
 @router.patch("/guides/{guide_profile_id}/verification/{verification_id}")
 def review_guide_verification(
     guide_profile_id: UUID,

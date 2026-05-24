@@ -421,6 +421,28 @@ def get_guide_verification_by_profile(
     return get_guide_verification(session, row[0]) if row else None
 
 
+def list_market_guide_verifications(
+    session: Session,
+    *,
+    market_id: UUID,
+    limit: int,
+    offset: int,
+) -> list[dict[str, Any]]:
+    rows = session.execute(
+        text(
+            """
+            SELECT id
+            FROM guide_verifications
+            WHERE market_id = :market_id AND deleted_at IS NULL
+            ORDER BY submitted_at DESC NULLS LAST, created_at DESC
+            LIMIT :limit OFFSET :offset
+            """
+        ),
+        {"market_id": market_id, "limit": limit, "offset": offset},
+    )
+    return [get_guide_verification(session, row[0]) for row in rows]
+
+
 def get_guide_verification(session: Session, verification_id: UUID) -> dict[str, Any] | None:
     row = session.execute(
         text(

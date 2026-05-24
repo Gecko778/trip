@@ -1,21 +1,26 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Calendar, MapPin, Users, DollarSign, Plane, CheckCircle, AlertTriangle, FileText, CreditCard, Shield } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Users, DollarSign, Plane, CheckCircle, AlertTriangle, FileText, Shield } from 'lucide-react';
+import { useApp } from '../App';
+import { apiClient, ApiError } from '../api/client';
+import type { AnonymousAgreement, ServiceOrder } from '../api/types';
 
 type OrderStatus = 'draft' | 'traveler_confirm' | 'guide_confirm' | 'agreement_pending' | 'payment_pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
 
 export function OrderPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user, refreshAppData } = useApp();
   const [orderStatus, setOrderStatus] = useState<OrderStatus>('draft');
   const [travelerConfirmed, setTravelerConfirmed] = useState(false);
   const [guideConfirmed, setGuideConfirmed] = useState(false);
   const [showAgreement, setShowAgreement] = useState(false);
   const [agreementSigned, setAgreementSigned] = useState(false);
-  const [showPayment, setShowPayment] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('');
+  const [apiOrder, setApiOrder] = useState<ServiceOrder | null>(null);
+  const [apiAgreement, setApiAgreement] = useState<AnonymousAgreement | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const order = {
+  const mockOrder = {
     id: '202606150001',
     guide: {
       name: '张伟',
@@ -45,6 +50,61 @@ export function OrderPage() {
     ],
   };
 
+  const syncApiState = (nextOrder: ServiceOrder) => {
+    setApiOrder(nextOrder);
+    setTravelerConfirmed(Boolean(nextOrder.traveler_price_confirmed_at));
+    setGuideConfirmed(Boolean(nextOrder.guide_itinerary_confirmed_at));
+    if (nextOrder.status === 'pending_both_confirm') setOrderStatus('draft');
+    else if (nextOrder.status === 'pending_traveler_confirm') setOrderStatus('traveler_confirm');
+    else if (nextOrder.status === 'pending_guide_confirm') setOrderStatus('guide_confirm');
+    else if (nextOrder.status === 'pending_agreement') setOrderStatus('agreement_pending');
+    else if (nextOrder.status === 'confirmed') setOrderStatus('confirmed');
+    else if (nextOrder.status === 'completed') setOrderStatus('completed');
+    else if (nextOrder.status === 'cancelled') setOrderStatus('cancelled');
+  };
+
+  useEffect(() => {
+    if (!id) return;
+    const loadOrder = async () => {
+      try {
+        const loadedOrder = await apiClient.order(id);
+        syncApiState(loadedOrder);
+        const agreement = await apiClient.agreement(id).catch(() => null);
+        setApiAgreement(agreement);
+        setAgreementSigned(Boolean(agreement?.traveler_signed_at || agreement?.guide_signed_at));
+      } catch {
+        setApiOrder(null);
+      }
+    };
+    loadOrder();
+  }, [id]);
+
+  const order = apiOrder
+    ? {
+        id: apiOrder.id,
+        guide: {
+          name: `导游 ${apiOrder.guide_user_id.slice(0, 4)}`,
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${apiOrder.guide_user_id}`,
+          verified: true,
+          rating: 0,
+        },
+        traveler: {
+          name: `旅行者 ${apiOrder.traveler_user_id.slice(0, 4)}`,
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${apiOrder.traveler_user_id}`,
+        },
+        route: typeof apiOrder.itinerary_json?.route === 'string' ? apiOrder.itinerary_json.route : `订单 ${apiOrder.id.slice(0, 8)}`,
+        startDate: apiOrder.service_start_date ?? '待确认',
+        endDate: apiOrder.service_end_date ?? apiOrder.service_start_date ?? '待确认',
+        days: 1,
+        arrivalPoint: apiOrder.service_region_id ? `地区 ${apiOrder.service_region_id.slice(0, 4)}` : '待确认',
+        needsPickup: Boolean(apiOrder.needs_pickup),
+        travelers: apiOrder.traveler_count ?? 1,
+        pricePerDay: Number(apiOrder.guide_price_amount),
+        totalAmount: Number(apiOrder.guide_price_amount),
+        serviceDetails: ['MVP 导游服务订单', '双方确认后可签署匿名协议', '真实支付后续接入'],
+      }
+    : mockOrder;
+
   const getStatusText = (status: OrderStatus) => {
     const statusMap = {
       draft: '草稿',
@@ -60,7 +120,17 @@ export function OrderPage() {
     return statusMap[status];
   };
 
-  const handleTravelerConfirm = () => {
+  const handleTravelerConfirm = async () => {
+    if (apiOrder) {
+      try {
+        const updated = await apiClient.travelerConfirmOrder(apiOrder.id);
+        syncApiState(updated);
+        await refreshAppData();
+      } catch (error) {
+        setActionError(error instanceof ApiError ? error.message : '旅行者确认失败');
+      }
+      return;
+    }
     setTravelerConfirmed(true);
     if (guideConfirmed) {
       setOrderStatus('agreement_pending');
@@ -69,7 +139,17 @@ export function OrderPage() {
     }
   };
 
-  const handleGuideConfirm = () => {
+  const handleGuideConfirm = async () => {
+    if (apiOrder) {
+      try {
+        const updated = await apiClient.guideConfirmOrder(apiOrder.id);
+        syncApiState(updated);
+        await refreshAppData();
+      } catch (error) {
+        setActionError(error instanceof ApiError ? error.message : '导游确认失败');
+      }
+      return;
+    }
     setGuideConfirmed(true);
     if (travelerConfirmed) {
       setOrderStatus('agreement_pending');
@@ -78,24 +158,24 @@ export function OrderPage() {
     }
   };
 
-  const handleSignAgreement = () => {
-    setAgreementSigned(true);
-    setShowAgreement(false);
-    setOrderStatus('payment_pending');
-    setShowPayment(true);
-  };
-
-  const handlePayment = () => {
-    if (!paymentMethod) {
-      alert('请选择支付方式');
+  const handleSignAgreement = async () => {
+    if (apiOrder) {
+      try {
+        const signed = await apiClient.signAgreement(apiOrder.id);
+        setApiAgreement(signed);
+        setAgreementSigned(true);
+        setShowAgreement(false);
+        const updated = await apiClient.order(apiOrder.id);
+        syncApiState(updated);
+        await refreshAppData();
+      } catch (error) {
+        setActionError(error instanceof ApiError ? error.message : '匿名协议签署失败');
+      }
       return;
     }
-    // Simulate payment
-    setTimeout(() => {
-      setOrderStatus('confirmed');
-      setShowPayment(false);
-      alert('支付成功！订单已确认');
-    }, 1000);
+    setAgreementSigned(true);
+    setShowAgreement(false);
+    setOrderStatus('confirmed');
   };
 
   return (
@@ -130,8 +210,8 @@ export function OrderPage() {
               { status: 'traveler_confirm', label: '旅行者确认价格', done: travelerConfirmed },
               { status: 'guide_confirm', label: '导游确认行程', done: guideConfirmed },
               { status: 'agreement_pending', label: '签署匿名协议', done: agreementSigned },
-              { status: 'payment_pending', label: '完成支付', done: orderStatus === 'confirmed' },
-              { status: 'confirmed', label: '订单确认', done: orderStatus === 'confirmed' },
+              { status: 'payment_pending', label: 'MVP 暂不接真实支付', done: agreementSigned },
+              { status: 'confirmed', label: '订单确认', done: orderStatus === 'confirmed' || orderStatus === 'completed' },
             ].map((step, index) => (
               <div key={step.status} className="flex items-center gap-3">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
@@ -266,7 +346,12 @@ export function OrderPage() {
 
         {/* Action Buttons */}
         <div className="bg-white rounded-xl shadow-sm p-6">
-          {!travelerConfirmed && (
+          {actionError && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              {actionError}
+            </div>
+          )}
+          {!travelerConfirmed && (!apiOrder || user?.id === apiOrder.traveler_user_id) && (
             <div className="mb-4 p-4 bg-blue-50 rounded-lg">
               <div className="flex items-start gap-3 mb-3">
                 <AlertTriangle size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
@@ -286,7 +371,23 @@ export function OrderPage() {
             </div>
           )}
 
-          {!guideConfirmed && travelerConfirmed && (
+          {!travelerConfirmed && apiOrder && user?.id !== apiOrder.traveler_user_id && (
+            <div className="mb-4 p-4 bg-blue-50 rounded-lg">
+              <p className="font-medium text-blue-900">等待旅行者确认价格</p>
+              <p className="text-sm text-blue-700 mt-1">旅行者确认后即可进入下一步。</p>
+            </div>
+          )}
+
+          {!guideConfirmed && travelerConfirmed && (!apiOrder || user?.id === apiOrder.guide_user_id) && (
+            <button
+              onClick={handleGuideConfirm}
+              className="mb-4 w-full py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium"
+            >
+              导游确认行程
+            </button>
+          )}
+
+          {!guideConfirmed && travelerConfirmed && apiOrder && user?.id !== apiOrder.guide_user_id && (
             <div className="mb-4 p-4 bg-amber-50 rounded-lg">
               <div className="flex items-start gap-3">
                 <AlertTriangle size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
@@ -301,6 +402,12 @@ export function OrderPage() {
           )}
 
           {travelerConfirmed && guideConfirmed && !agreementSigned && (
+            <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+              双方已确认，当前订单可签署匿名协议。MVP 阶段不接真实支付。
+            </div>
+          )}
+
+          {travelerConfirmed && guideConfirmed && !agreementSigned && (
             <button
               onClick={() => setShowAgreement(true)}
               className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2"
@@ -310,13 +417,23 @@ export function OrderPage() {
             </button>
           )}
 
-          {agreementSigned && orderStatus === 'payment_pending' && (
+          {agreementSigned && orderStatus !== 'completed' && (
             <button
-              onClick={() => setShowPayment(true)}
+              onClick={async () => {
+                if (apiOrder) {
+                  const completed = await apiClient.completeOrder(apiOrder.id).catch(() => null);
+                  if (completed) {
+                    syncApiState(completed);
+                    await refreshAppData();
+                  }
+                } else {
+                  setOrderStatus('completed');
+                }
+              }}
               className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center justify-center gap-2"
             >
-              <CreditCard size={20} />
-              立即支付 ¥{order.totalAmount}
+              <CheckCircle size={20} />
+              标记服务完成
             </button>
           )}
 
@@ -324,7 +441,7 @@ export function OrderPage() {
             <div className="text-center py-4">
               <CheckCircle size={48} className="text-green-600 mx-auto mb-3" />
               <p className="font-bold text-lg mb-1">订单已确认</p>
-              <p className="text-sm text-gray-600">请在约定时间到达集合地点</p>
+              <p className="text-sm text-gray-600">MVP 阶段不接真实支付，后续补齐支付流程。</p>
             </div>
           )}
         </div>
@@ -338,32 +455,15 @@ export function OrderPage() {
             <div className="prose prose-sm mb-6 text-gray-700 space-y-3">
               <p className="font-medium">订单编号: {order.id}</p>
 
-              <h3 className="font-bold mt-4">一、双方权利与义务</h3>
-              <p>1. 导游方承诺按约定时间、地点提供专业导游服务</p>
-              <p>2. 旅行者承诺按时支付服务费用</p>
-              <p>3. 双方应相互尊重，文明沟通</p>
-
-              <h3 className="font-bold mt-4">二、服务内容</h3>
-              <p>服务路线: {order.route}</p>
-              <p>服务时间: {order.startDate} 至 {order.endDate}</p>
-              <p>服务人数: {order.travelers}人</p>
-              <p>服务费用: ¥{order.totalAmount}</p>
-
-              <h3 className="font-bold mt-4">三、违约责任</h3>
-              <p>1. 任何一方无故取消订单，将影响信誉记录</p>
-              <p>2. 多次违约将受到平台处罚，包括但不限于：</p>
-              <ul className="list-disc pl-6">
-                <li>信誉度降低</li>
-                <li>显示警惕标签</li>
-                <li>限制发起聊天</li>
-                <li>限制接单</li>
-              </ul>
-
-              <h3 className="font-bold mt-4">四、争议解决</h3>
-              <p>如发生争议，应首先通过平台协商解决。协商不成的，可申请平台仲裁。</p>
-
-              <h3 className="font-bold mt-4">五、隐私保护</h3>
-              <p>双方信息受平台保护，未经对方同意不得泄露个人信息。</p>
+              <p>协议版本: {apiAgreement?.agreement_version ?? 'mvp-v1'}</p>
+              <p>协议状态: {apiAgreement?.status ?? 'pending_sign'}</p>
+              <p>服务日期: {apiAgreement?.service_start_date ?? order.startDate} 至 {apiAgreement?.service_end_date ?? order.endDate}</p>
+              <p>服务地点: {apiAgreement?.service_region_id ? `地区 ${apiAgreement.service_region_id.slice(0, 4)}` : order.arrivalPoint}</p>
+              <p>价格: {apiAgreement?.price_currency ?? 'CNY'} {apiAgreement?.price_amount ?? order.totalAmount}</p>
+              <p>取消规则: {apiAgreement?.cancellation_policy ?? apiOrder?.cancellation_policy ?? '后端暂无取消规则字段'}</p>
+              <p>违约责任: {apiAgreement?.breach_responsibility ?? apiOrder?.breach_responsibility ?? '后端暂无违约责任字段'}</p>
+              <p>旅行者签署时间: {apiAgreement?.traveler_signed_at ?? '未签署'}</p>
+              <p>导游签署时间: {apiAgreement?.guide_signed_at ?? '未签署'}</p>
 
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-6">
                 <div className="flex items-start gap-3">
@@ -395,75 +495,6 @@ export function OrderPage() {
         </div>
       )}
 
-      {/* Payment Modal */}
-      {showPayment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <h2 className="text-xl font-bold mb-4">选择支付方式</h2>
-
-            <div className="mb-6">
-              <div className="text-center py-4 border-b border-gray-200">
-                <p className="text-gray-600 mb-2">支付金额</p>
-                <p className="text-3xl font-bold text-blue-600">¥{order.totalAmount}</p>
-              </div>
-            </div>
-
-            <div className="space-y-3 mb-6">
-              {[
-                { id: 'alipay', name: '支付宝', icon: '💳' },
-                { id: 'wechat', name: '微信支付', icon: '💚' },
-                { id: 'card', name: '银行卡', icon: '🏦' },
-              ].map(method => (
-                <label
-                  key={method.id}
-                  className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                    paymentMethod === method.id
-                      ? 'border-blue-600 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="payment"
-                    value={method.id}
-                    checked={paymentMethod === method.id}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-2xl">{method.icon}</span>
-                  <span className="font-medium">{method.name}</span>
-                </label>
-              ))}
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <div className="flex items-start gap-3">
-                <Shield size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-blue-900">
-                  <p className="font-medium mb-1">资金安全保障</p>
-                  <p>款项将由平台托管，服务完成后自动结算给导游</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowPayment(false)}
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                取消
-              </button>
-              <button
-                onClick={handlePayment}
-                disabled={!paymentMethod}
-                className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
-              >
-                确认支付
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

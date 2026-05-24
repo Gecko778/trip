@@ -199,6 +199,18 @@ def test_guide_verification_review_requires_authentication() -> None:
     assert response.json()["error"]["message"] == "Missing bearer token"
 
 
+def test_admin_guide_verifications_requires_authentication() -> None:
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/v1/admin/markets/00000000-0000-0000-0000-000000000100/guide-verifications",
+        headers={"x-trace-id": "admin-verifications-no-auth"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["message"] == "Missing bearer token"
+
+
 def test_market_guides_requires_authentication() -> None:
     client = TestClient(app)
 

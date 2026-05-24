@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MessageCircle, Bell, ShoppingBag, ChevronRight, Package, AlertCircle, CheckCircle } from 'lucide-react';
+import { apiClient } from '../api/client';
+import { useApp } from '../App';
 
 export function MessagesPage() {
+  const { data, refreshAppData } = useApp();
   const [activeTab, setActiveTab] = useState<'chats' | 'system' | 'orders'>('chats');
   const conversations = [
     {
@@ -37,7 +40,7 @@ export function MessagesPage() {
     },
   ];
 
-  const systemNotifications = [
+  const mockSystemNotifications = [
     {
       id: 1,
       type: 'order',
@@ -63,6 +66,17 @@ export function MessagesPage() {
       read: true,
     },
   ];
+
+  const apiNotifications = (data?.notifications ?? []).map(notification => ({
+    id: notification.id,
+    type: notification.type,
+    title: notification.title,
+    content: notification.body ?? '',
+    time: notification.created_at?.slice(0, 16).replace('T', ' ') ?? '',
+    read: Boolean(notification.read_at),
+    relatedOrderId: notification.related_order_id,
+  }));
+  const systemNotifications = apiNotifications.length > 0 ? apiNotifications : mockSystemNotifications;
 
   const orderNotifications = [
     {
@@ -169,9 +183,15 @@ export function MessagesPage() {
           /* System Notifications */
           <div className="divide-y divide-gray-200">
             {systemNotifications.map(notification => (
-              <div
+              <button
                 key={notification.id}
-                className={`p-4 ${notification.read ? 'bg-white' : 'bg-blue-50'}`}
+                onClick={async () => {
+                  if (!notification.read && typeof notification.id === 'string') {
+                    await apiClient.markNotificationRead(notification.id).catch(() => null);
+                    await refreshAppData();
+                  }
+                }}
+                className={`w-full p-4 text-left ${notification.read ? 'bg-white' : 'bg-blue-50'}`}
               >
                 <div className="flex items-start gap-3">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -194,7 +214,7 @@ export function MessagesPage() {
                     <div className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0"></div>
                   )}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}

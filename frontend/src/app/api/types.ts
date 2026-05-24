@@ -57,8 +57,8 @@ export interface Market {
 
 export interface ProfileBundle {
   role_profiles: unknown[];
-  traveler_profiles: unknown[];
-  guide_profiles: unknown[];
+  traveler_profiles: Array<{ id: string; user_id: string; market_id: string; preference_json: Record<string, unknown> }>;
+  guide_profiles: GuideProfile[];
 }
 
 export interface TravelPlan {
@@ -150,11 +150,104 @@ export interface ServiceOrder {
   market_id: string;
   traveler_user_id: string;
   guide_user_id: string;
+  travel_plan_id?: string | null;
+  message_thread_id?: string | null;
   status: string;
   payment_status: string;
   guide_price_amount: string;
   guide_price_currency: string;
+  traveler_display_amount?: string | null;
+  traveler_display_currency?: string | null;
   service_start_date: string | null;
+  service_end_date?: string | null;
+  service_region_id?: string | null;
+  needs_pickup?: boolean;
+  traveler_count?: number;
+  traveler_price_confirmed_at?: string | null;
+  guide_itinerary_confirmed_at?: string | null;
+  itinerary_json?: Record<string, unknown>;
+  cancellation_policy?: string | null;
+  breach_responsibility?: string | null;
+  canceled_at?: string | null;
+  cancellation_penalty_applied?: boolean;
+  cancellation_penalty_note?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AnonymousAgreement {
+  id: string;
+  market_id: string;
+  traveler_user_id: string;
+  guide_user_id: string;
+  order_id: string;
+  agreement_version: string;
+  status: string;
+  service_start_date: string | null;
+  service_end_date: string | null;
+  service_region_id: string | null;
+  price_amount: string;
+  price_currency: string;
+  cancellation_policy: string | null;
+  breach_responsibility: string | null;
+  traveler_signed_at: string | null;
+  guide_signed_at: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ReviewRecord {
+  id: string;
+  market_id: string;
+  order_id: string;
+  reviewer_user_id: string;
+  reviewee_user_id: string;
+  rating: string;
+  body: string | null;
+  dimensions_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface NotificationRecord {
+  id: string;
+  market_id: string | null;
+  user_id: string;
+  type: string;
+  related_order_id: string | null;
+  related_thread_id: string | null;
+  related_agreement_id: string | null;
+  title: string;
+  body: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface GuideVerification {
+  id: string;
+  guide_profile_id: string;
+  market_id: string;
+  identity_status: string;
+  qualification_status: string;
+  real_avatar_status: string;
+  service_region_status: string;
+  language_status: string;
+  badge_status: string;
+  failure_reason: string | null;
+  appeal_status: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+}
+
+export interface DisputeCase {
+  id: string;
+  market_id: string;
+  order_id: string;
+  opened_by_user_id: string;
+  dispute_type: string;
+  status: string;
+  summary: string | null;
+  created_at?: string;
 }
 
 export interface AppBootstrapData {
@@ -165,4 +258,5 @@ export interface AppBootstrapData {
   travelPlans: TravelPlan[];
   messageThreads: MessageThread[];
   orders: ServiceOrder[];
+  notifications: NotificationRecord[];
 }
