@@ -118,7 +118,7 @@ export function ChatPage() {
   };
 
   return (
-    <div className="fixed inset-0 bg-white z-50 flex flex-col">
+    <div className="fixed inset-x-0 top-0 bottom-16 bg-white z-40 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 h-20 border-b border-gray-200 bg-white">
         <div className="flex items-center gap-3 flex-1">

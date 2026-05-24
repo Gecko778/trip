@@ -6,6 +6,7 @@ import { apiClient, ApiError } from '../api/client';
 import type { AuthResponse } from '../api/types';
 
 type Screen = 'landing' | 'login' | 'register' | 'forgot' | 'phone';
+const MIN_PASSWORD_LENGTH = 8;
 
 interface LoginPageProps {
   onLogin: (auth: AuthResponse) => Promise<void>;
@@ -78,6 +79,41 @@ const slideVariants = {
   exit: (dir: number) => ({ x: dir > 0 ? -48 : 48, opacity: 0 }),
 };
 
+function InputField({
+  icon: Icon, type = 'text', placeholder, value, onChange, right,
+}: {
+  icon: React.ElementType; type?: string; placeholder: string;
+  value: string; onChange: (v: string) => void; right?: React.ReactNode;
+}) {
+  return (
+    <div className="relative flex items-center bg-white/10 border border-white/20 rounded-2xl px-4 py-3.5 gap-3 focus-within:border-white/50 focus-within:bg-white/15 transition-all">
+      <Icon size={18} className="text-white/50 flex-shrink-0" />
+      <input
+        type={type}
+        placeholder={placeholder}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="flex-1 bg-transparent text-white placeholder-white/40 text-sm focus:outline-none"
+      />
+      {right}
+    </div>
+  );
+}
+
+function getAuthErrorMessage(error: unknown) {
+  if (!(error instanceof ApiError)) {
+    return '请求失败，请稍后重试';
+  }
+  const validationErrors = (error.fieldErrors as {
+    errors?: Array<{ loc?: unknown[]; msg?: string; ctx?: { min_length?: number } }>;
+  }).errors;
+  const passwordError = validationErrors?.find(item => item.loc?.includes('password'));
+  if (passwordError) {
+    return `密码至少需要 ${passwordError.ctx?.min_length ?? MIN_PASSWORD_LENGTH} 位`;
+  }
+  return error.message;
+}
+
 export function LoginPage({ onLogin, initialError }: LoginPageProps) {
   const [screen, setScreen] = useState<Screen>('landing');
   const [dir, setDir] = useState(1);
@@ -117,6 +153,10 @@ export function LoginPage({ onLogin, initialError }: LoginPageProps) {
       setFormError('请填写邮箱和密码');
       return;
     }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setFormError(`密码至少需要 ${MIN_PASSWORD_LENGTH} 位`);
+      return;
+    }
     if (mode === 'register') {
       if (!name.trim()) {
         setFormError('请填写姓名');
@@ -134,7 +174,7 @@ export function LoginPage({ onLogin, initialError }: LoginPageProps) {
         : await apiClient.register(email.trim(), password, name.trim());
       await onLogin(auth);
     } catch (error) {
-      setFormError(error instanceof ApiError ? error.message : '请求失败，请稍后重试');
+      setFormError(getAuthErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
@@ -154,25 +194,6 @@ export function LoginPage({ onLogin, initialError }: LoginPageProps) {
       });
     }, 1000);
   };
-
-  const InputField = ({
-    icon: Icon, type = 'text', placeholder, value, onChange, right,
-  }: {
-    icon: React.ElementType; type?: string; placeholder: string;
-    value: string; onChange: (v: string) => void; right?: React.ReactNode;
-  }) => (
-    <div className="relative flex items-center bg-white/10 border border-white/20 rounded-2xl px-4 py-3.5 gap-3 focus-within:border-white/50 focus-within:bg-white/15 transition-all">
-      <Icon size={18} className="text-white/50 flex-shrink-0" />
-      <input
-        type={type}
-        placeholder={placeholder}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="flex-1 bg-transparent text-white placeholder-white/40 text-sm focus:outline-none"
-      />
-      {right}
-    </div>
-  );
 
   const SocialButton = ({
     icon, label, onClick, bg = 'bg-white', text = 'text-gray-800',
@@ -461,7 +482,7 @@ export function LoginPage({ onLogin, initialError }: LoginPageProps) {
                   value={email} onChange={setEmail}
                 />
                 <InputField
-                  icon={Lock} type={showPw ? 'text' : 'password'} placeholder="设置密码"
+                  icon={Lock} type={showPw ? 'text' : 'password'} placeholder="设置密码（至少 8 位）"
                   value={password} onChange={setPassword}
                   right={
                     <button onClick={() => setShowPw(p => !p)} className="text-white/40 hover:text-white/70 transition-colors">

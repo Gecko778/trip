@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { Plus, Minus, Calendar, MapPin, Users, DollarSign, Plane, Edit2, Trash2, CheckCircle, FileText, ArrowLeft, Save, Send, AlertCircle } from 'lucide-react';
 import { useApp } from '../App';
 import { apiClient, ApiError } from '../api/client';
@@ -33,6 +34,124 @@ interface ServiceData {
   availability: string;
   activeOrders: number;
   upcomingBookings: number;
+}
+
+interface PlanFormFieldsProps {
+  formData: PlanData;
+  setFormData: Dispatch<SetStateAction<PlanData>>;
+}
+
+function FormFields({ formData, setFormData }: PlanFormFieldsProps) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium mb-2">旅行路线</label>
+        <input
+          type="text"
+          placeholder="例: 上海 → 北京 → 上海"
+          value={formData.route}
+          onChange={(e) => setFormData({ ...formData, route: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          required
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium mb-2">到达日期</label>
+          <input
+            type="date"
+            value={formData.startDate}
+            onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-2">离开日期</label>
+          <input
+            type="date"
+            value={formData.endDate}
+            onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">接 / 送地点（选填）</label>
+        <input
+          type="text"
+          placeholder="例: 上海浦东机场"
+          value={formData.arrivalPoint}
+          onChange={(e) => setFormData({ ...formData, arrivalPoint: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={formData.needsPickup}
+            onChange={(e) => setFormData({ ...formData, needsPickup: e.target.checked })}
+            className="w-4 h-4"
+          />
+          <span className="text-sm">需要接机服务</span>
+        </label>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">旅行人数</label>
+        <input
+          type="number"
+          min="1"
+          value={formData.travelers}
+          onChange={(e) => setFormData({ ...formData, travelers: parseInt(e.target.value) })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          required
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">预算范围</label>
+        <input
+          type="text"
+          placeholder="例: 3000-5000"
+          value={formData.budget}
+          onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          required
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">备注（选填）</label>
+        <textarea
+          placeholder="例: 希望安排亲子友好路线"
+          value={formData.notes ?? ''}
+          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          rows={3}
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">可见范围</label>
+        <select
+          value={formData.visibility}
+          onChange={(e) => setFormData({ ...formData, visibility: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">所有用户</option>
+          <option value="guides">仅导游</option>
+          <option value="travelers">仅旅行者</option>
+        </select>
+      </div>
+    </div>
+  );
 }
 
 export function PlansPage() {
@@ -298,117 +417,6 @@ export function PlansPage() {
     setEditingServiceFromIcon(null);
   };
 
-  const FormFields = () => (
-    <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium mb-2">旅行路线</label>
-        <input
-          type="text"
-          placeholder="例: 上海 → 北京 → 上海"
-          value={formData.route}
-          onChange={(e) => setFormData({ ...formData, route: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          required
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm font-medium mb-2">到达日期</label>
-          <input
-            type="date"
-            value={formData.startDate}
-            onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-2">离开日期</label>
-          <input
-            type="date"
-            value={formData.endDate}
-            onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium mb-2">接 / 送地点（选填）</label>
-        <input
-          type="text"
-          placeholder="例: 上海浦东机场"
-          value={formData.arrivalPoint}
-          onChange={(e) => setFormData({ ...formData, arrivalPoint: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      <div>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={formData.needsPickup}
-            onChange={(e) => setFormData({ ...formData, needsPickup: e.target.checked })}
-            className="w-4 h-4"
-          />
-          <span className="text-sm">需要接机服务</span>
-        </label>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium mb-2">旅行人数</label>
-        <input
-          type="number"
-          min="1"
-          value={formData.travelers}
-          onChange={(e) => setFormData({ ...formData, travelers: parseInt(e.target.value) })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          required
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium mb-2">预算范围</label>
-        <input
-          type="text"
-          placeholder="例: 3000-5000"
-          value={formData.budget}
-          onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          required
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium mb-2">备注（选填）</label>
-        <textarea
-          placeholder="例: 希望安排亲子友好路线"
-          value={formData.notes ?? ''}
-          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-          rows={3}
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium mb-2">可见范围</label>
-        <select
-          value={formData.visibility}
-          onChange={(e) => setFormData({ ...formData, visibility: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">所有用户</option>
-          <option value="guides">仅导游</option>
-          <option value="travelers">仅旅行者</option>
-        </select>
-      </div>
-    </div>
-  );
-
   return (
     <div className="max-w-screen-xl mx-auto p-4 pb-20">
       {role === 'traveler' ? (
@@ -442,7 +450,7 @@ export function PlansPage() {
                 className="bg-white rounded-xl shadow-lg p-6 mb-6 overflow-hidden"
               >
                 <h2 className="text-xl font-bold mb-4">创建旅行计划</h2>
-                <FormFields />
+                <FormFields formData={formData} setFormData={setFormData} />
                 {formError && (
                   <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                     <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
@@ -680,7 +688,7 @@ export function PlansPage() {
 
                   {/* Scrollable Form Content */}
                   <div className="overflow-y-auto flex-1 px-6 py-4">
-                    <FormFields />
+                    <FormFields formData={formData} setFormData={setFormData} />
                     {formError && (
                       <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                         <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />

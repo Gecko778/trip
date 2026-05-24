@@ -5,7 +5,7 @@ import { useApp } from '../App';
 import { motion, AnimatePresence } from 'motion/react';
 
 export function ProfilePage() {
-  const { role, user, toggleRole } = useApp();
+  const { role, user, toggleRole, logout } = useApp();
   const [isAnimating, setIsAnimating] = useState(false);
   const hasAdminEntry = user?.roles.some(item =>
     ['sys_admin', 'market_admin', 'support_agent', 'guide_reviewer', 'risk_reviewer'].includes(item.code)
@@ -286,7 +286,10 @@ export function ProfilePage() {
 
       {/* Logout */}
       <div className="px-4 mt-4">
-        <button className="w-full py-4 bg-white rounded-xl shadow-sm text-red-600 font-medium hover:bg-red-50 transition-colors flex items-center justify-center gap-2">
+        <button
+          onClick={logout}
+          className="w-full py-4 bg-white rounded-xl shadow-sm text-red-600 font-medium hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
+        >
           <LogOut size={20} />
           退出登录
         </button>

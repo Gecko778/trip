@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     google_oauth_client_id: str = ""
     apple_oauth_client_id: str = ""
     apple_oauth_bundle_id: str = ""
+    cors_allow_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

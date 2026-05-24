@@ -79,8 +79,11 @@ function BottomNav() {
 }
 
 function AppContent() {
+  const location = useLocation();
+  const hidesBottomNav = location.pathname.startsWith('/order/');
+
   return (
-    <div className="pb-16 min-h-screen bg-gray-50">
+    <div className={`${hidesBottomNav ? '' : 'pb-16'} min-h-screen bg-gray-50`}>
       <Routes>
         <Route path="/" element={<MapView />} />
         <Route path="/discover" element={<DiscoverPage />} />
@@ -98,7 +101,7 @@ function AppContent() {
         <Route path="/notifications" element={<MessagesPage />} />
         <Route path="/admin" element={<AdminPage />} />
       </Routes>
-      <BottomNav />
+      {!hidesBottomNav && <BottomNav />}
     </div>
   );
 }

@@ -33,3 +33,20 @@ def test_missing_route_uses_standard_error_envelope() -> None:
             "trace_id": "missing-trace",
         },
     }
+
+
+def test_cors_preflight_allows_frontend_origin() -> None:
+    client = TestClient(app)
+
+    response = client.options(
+        "/api/v1/auth/register",
+        headers={
+            "origin": "http://127.0.0.1:5173",
+            "access-control-request-method": "POST",
+            "access-control-request-headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+    assert "POST" in response.headers["access-control-allow-methods"]

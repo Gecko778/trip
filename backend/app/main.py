@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import router as auth_router
 from app.api.commerce import router as commerce_router
@@ -16,6 +17,13 @@ from app.core.middleware import TraceIdMiddleware
 
 def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, version=settings.app_version)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.add_middleware(TraceIdMiddleware)
     register_exception_handlers(app)
     app.include_router(auth_router)
