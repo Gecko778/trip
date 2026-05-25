@@ -5,40 +5,25 @@ import { apiClient } from '../api/client';
 import { useApp } from '../App';
 
 export function MessagesPage() {
-  const { data, refreshAppData } = useApp();
+  const { data, user, refreshAppData } = useApp();
   const [activeTab, setActiveTab] = useState<'chats' | 'system' | 'orders'>('chats');
-  const conversations = [
-    {
-      id: 1,
-      name: '张伟',
-      role: 'guide',
-      lastMessage: '好的,那我们就这样确定了',
-      time: '10分钟前',
-      unread: 2,
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=zhang',
-      online: true,
-    },
-    {
-      id: 2,
-      name: '李娜',
-      role: 'guide',
-      lastMessage: '您好,我可以提供接机服务',
-      time: '1小时前',
+  const formatTime = (value?: string | null) => value?.slice(0, 16).replace('T', ' ') ?? '';
+  const conversations = (data?.messageThreads ?? []).map(thread => {
+    const isInitiator = thread.initiator_user_id === user?.id;
+    const otherUserId = isInitiator ? thread.recipient_user_id : thread.initiator_user_id;
+    const otherName = isInitiator ? thread.recipient_display_name : thread.initiator_display_name;
+    const otherAvatar = isInitiator ? thread.recipient_avatar_url : thread.initiator_avatar_url;
+    return {
+      id: thread.id,
+      userId: otherUserId,
+      name: otherName ?? `用户 ${otherUserId.slice(0, 4)}`,
+      lastMessage: thread.last_message_body ?? '暂无消息',
+      time: formatTime(thread.last_message_created_at ?? thread.last_message_at),
       unread: 0,
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=li',
+      avatar: otherAvatar ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${otherUserId}`,
       online: false,
-    },
-    {
-      id: 3,
-      name: '王芳',
-      role: 'guide',
-      lastMessage: '请问具体的行程安排是怎样的?',
-      time: '昨天',
-      unread: 1,
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=wang',
-      online: false,
-    },
-  ];
+    };
+  });
 
   const mockSystemNotifications = [
     {
@@ -143,12 +128,11 @@ export function MessagesPage() {
           /* Conversations List */
           <div className="divide-y divide-gray-200">
             {conversations.map(conversation => (
-              <Link
+              <div
                 key={conversation.id}
-                to={`/chat/${conversation.id}`}
                 className="flex items-center gap-3 p-4 bg-white hover:bg-gray-50 transition-colors"
               >
-                <div className="relative">
+                <Link to={`/user/${conversation.userId}`} className="relative flex-shrink-0">
                   <img
                     src={conversation.avatar}
                     alt={conversation.name}
@@ -157,15 +141,15 @@ export function MessagesPage() {
                   {conversation.online && (
                     <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
                   )}
-                </div>
+                </Link>
 
-                <div className="flex-1 min-w-0">
+                <Link to={`/chat/${conversation.id}`} className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="font-medium truncate">{conversation.name}</h3>
                     <span className="text-xs text-gray-500 ml-2">{conversation.time}</span>
                   </div>
                   <p className="text-sm text-gray-600 truncate">{conversation.lastMessage}</p>
-                </div>
+                </Link>
 
                 {conversation.unread > 0 && (
                   <div className="w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-medium">
@@ -173,8 +157,10 @@ export function MessagesPage() {
                   </div>
                 )}
 
-                <ChevronRight size={20} className="text-gray-400" />
-              </Link>
+                <Link to={`/chat/${conversation.id}`}>
+                  <ChevronRight size={20} className="text-gray-400" />
+                </Link>
+              </div>
             ))}
           </div>
         )}

@@ -224,33 +224,6 @@ export function DiscoverPage() {
     },
   ];
 
-  const followedUsers = [
-    {
-      id: 1,
-      name: '张伟',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=zhang',
-      role: 'guide',
-    },
-    {
-      id: 2,
-      name: '李娜',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=li',
-      role: 'guide',
-    },
-    {
-      id: 3,
-      name: '陈晓',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=chen',
-      role: 'traveler',
-    },
-    {
-      id: 4,
-      name: '王芳',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=wang',
-      role: 'guide',
-    },
-  ];
-
   const mockTravelPlans = [
     {
       id: 1,
@@ -311,11 +284,12 @@ export function DiscoverPage() {
   ];
 
   const apiGuides = (data?.guides ?? []).map(guide => ({
-    id: guide.id,
-    name: `导游 ${guide.id.slice(0, 4)}`,
-    location: `地区 ${guide.home_region_id.slice(0, 4)}`,
-    serviceAreas: guide.service_region_ids.length
-      ? guide.service_region_ids.map(regionId => `地区 ${regionId.slice(0, 4)}`)
+    id: guide.user_id,
+    profileId: guide.id,
+    name: guide.user_display_name ?? `导游 ${guide.user_id.slice(0, 4)}`,
+    location: guide.home_region_name ?? `地区 ${guide.home_region_id.slice(0, 4)}`,
+    serviceAreas: guide.service_regions?.length
+      ? guide.service_regions.map(region => region.name)
       : [`地区 ${guide.home_region_id.slice(0, 4)}`],
     pricePerDay: Number(guide.daily_price_amount),
     rating: Number(guide.rating ?? 0),
@@ -325,10 +299,15 @@ export function DiscoverPage() {
     gender: guide.gender,
     age: guide.birth_year ? new Date().getFullYear() - guide.birth_year : undefined,
     languages: guide.language_tags.length ? guide.language_tags : ['English'],
-    avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${guide.user_id}`,
+    avatar: guide.user_avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${guide.user_id}`,
     completedTrips: guide.completed_order_count,
   }));
   const guides = apiGuides.length > 0 ? apiGuides : mockGuides;
+  const followedUsers = guides.slice(0, 4).map(guide => ({
+    id: guide.id,
+    name: guide.name,
+    avatar: guide.avatar,
+  }));
 
   const apiTravelPlans = (data?.travelPlans ?? []).map(plan => {
     const routeNodes = plan.route_nodes ?? [];
@@ -339,13 +318,14 @@ export function DiscoverPage() {
     const lastNode = routeNodes[routeNodes.length - 1];
     return {
       id: plan.id,
-      traveler: `旅行者 ${plan.traveler_user_id.slice(0, 4)}`,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${plan.traveler_user_id}`,
+      travelerUserId: plan.traveler_user_id,
+      traveler: plan.traveler_display_name ?? `旅行者 ${plan.traveler_user_id.slice(0, 4)}`,
+      avatar: plan.traveler_avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${plan.traveler_user_id}`,
       nationality: plan.country_code === 'CN' ? '🇨🇳' : '🌐',
       route,
       startDate: firstNode?.planned_start_at?.slice(0, 10) ?? plan.arrival_date,
       endDate: lastNode?.planned_end_at?.slice(0, 10) ?? plan.arrival_date,
-      arrivalPoint: plan.arrival_region_id ? `地区 ${plan.arrival_region_id.slice(0, 4)}` : '待确认',
+      arrivalPoint: plan.arrival_region_name ?? (plan.arrival_region_id ? `地区 ${plan.arrival_region_id.slice(0, 4)}` : '待确认'),
       needsPickup: Boolean(plan.needs_pickup),
       budget: [plan.budget_min_amount, plan.budget_max_amount].filter(Boolean).join('-') || '待确认',
       travelers: plan.traveler_count ?? 1,
@@ -710,7 +690,7 @@ export function DiscoverPage() {
                     className="bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow"
                   >
                     <div className="flex gap-4">
-                      <Link to={`/user/${plan.id}`}>
+                      <Link to={`/user/${'travelerUserId' in plan ? plan.travelerUserId : plan.id}`}>
                         <img
                           src={plan.avatar}
                           alt={plan.traveler}
@@ -795,7 +775,7 @@ export function DiscoverPage() {
 
                     {/* Avatar and Name */}
                     <div className="flex flex-col items-center mb-3">
-                      <Link to={`/user/${plan.id}`}>
+                      <Link to={`/user/${'travelerUserId' in plan ? plan.travelerUserId : plan.id}`}>
                         <img
                           src={plan.avatar}
                           alt={plan.traveler}

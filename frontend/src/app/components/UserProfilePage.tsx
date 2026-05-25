@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, MessageCircle, UserPlus, UserMinus, Star, MapPin, Calendar, Award, Shield, Languages, Plane, ChevronRight, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { apiClient, ApiError } from '../api/client';
+import type { PublicUserProfile } from '../api/types';
 
 type ViewRole = 'guide' | 'traveler';
+const fallbackAvatar = (seed: string) => `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`;
 
 export function UserProfilePage() {
   const { id } = useParams();
@@ -12,56 +15,107 @@ export function UserProfilePage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'reviews' | 'gallery'>('overview');
   const [viewRole, setViewRole] = useState<ViewRole>('guide');
   const [isAnimating, setIsAnimating] = useState(false);
+  const [profile, setProfile] = useState<PublicUserProfile | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Mock data - in real app would fetch based on viewRole
-  const userData = {
-    guide: {
-      id: 1,
-      name: '张伟',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=zhang',
-      age: 32,
-      gender: 'male',
-      location: '上海',
-      verified: true,
-      rating: 4.9,
-      totalReviews: 127,
-      completedTrips: 89,
-      languages: ['中文', 'English', '日本語'],
-      memberSince: '2024-01',
-      responseTime: '5分钟',
-      cancellationRate: '2%',
-      bio: '资深本地导游，熟悉上海及周边地区的历史文化。擅长定制化行程规划，特别是历史文化和美食探索路线。',
-      serviceAreas: ['上海', '江苏', '浙江'],
-      pricePerDay: 1000,
-      airportPickup: true,
-      specialties: ['历史文化', '美食探索', '摄影指导', '亲子游'],
-      certifications: ['国家导游证', '英语导游证', '急救证书'],
-    },
-    traveler: {
-      id: 1,
-      name: '张伟',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=zhang',
-      age: 32,
-      gender: 'male',
-      location: '上海',
-      verified: true,
-      rating: 4.7,
-      totalReviews: 23,
-      completedTrips: 15,
-      languages: ['中文', 'English'],
-      memberSince: '2024-01',
-      responseTime: '15分钟',
-      bio: '热爱旅行，喜欢探索不同的文化和美食。曾经去过15个国家，希望继续环游世界。',
-      interests: ['摄影', '美食', '历史', '徒步', '文化交流'],
-      traveledCountries: 15,
-      plannedTrips: 3,
-      visitedCities: 42,
-    },
+  useEffect(() => {
+    let canceled = false;
+    const loadProfile = async () => {
+      if (!id) return;
+      setLoadError(null);
+      try {
+        let nextProfile: PublicUserProfile;
+        try {
+          nextProfile = await apiClient.publicUserProfile(id);
+        } catch (error) {
+          const guideProfile = await apiClient.guideProfile(id);
+          nextProfile = await apiClient.publicUserProfile(guideProfile.user_id);
+          setViewRole('guide');
+        }
+        if (canceled) return;
+        setProfile(nextProfile);
+        if (!nextProfile.guide_profiles.length && nextProfile.traveler_profiles.length) {
+          setViewRole('traveler');
+        }
+      } catch (error) {
+        if (canceled) return;
+        setLoadError(error instanceof ApiError ? error.message : '用户资料加载失败');
+      }
+    };
+    loadProfile();
+    return () => {
+      canceled = true;
+    };
+  }, [id]);
+
+  const userData = useMemo(() => {
+    if (!profile) return null;
+    const base = profile.user;
+    const avatar = base.avatar_url ?? fallbackAvatar(base.id);
+    const guide = profile.guide_profiles[0];
+    const traveler = profile.traveler_profiles[0];
+    return {
+      guide: guide
+        ? {
+            id: base.id,
+            name: base.display_name,
+            avatar,
+            age: guide.birth_year ? new Date().getFullYear() - guide.birth_year : undefined,
+            gender: guide.gender,
+            location: guide.home_region_name ?? `地区 ${guide.home_region_id.slice(0, 4)}`,
+            verified: guide.verification_status === 'approved',
+            rating: Number(guide.rating ?? 0),
+            totalReviews: 0,
+            completedTrips: guide.completed_order_count,
+            languages: guide.language_tags.length ? guide.language_tags : ['English'],
+            memberSince: '已注册用户',
+            responseTime: guide.average_response_seconds
+              ? `${Math.round(guide.average_response_seconds / 60)}分钟`
+              : '待统计',
+            cancellationRate: `${(Number(guide.cancellation_rate) * 100).toFixed(1)}%`,
+            bio: '',
+            serviceAreas: guide.service_regions?.length
+              ? guide.service_regions.map(region => region.name)
+              : [guide.home_region_name ?? `地区 ${guide.home_region_id.slice(0, 4)}`],
+            pricePerDay: Number(guide.daily_price_amount),
+            airportPickup: guide.offers_pickup,
+            specialties: guide.language_tags,
+            certifications: [guide.verification_status === 'approved' ? '导游认证已通过' : '导游认证待完善'],
+          }
+        : null,
+      traveler: traveler
+        ? {
+            id: base.id,
+            name: base.display_name,
+            avatar,
+            age: undefined,
+            gender: '',
+            location: base.preferred_locale,
+            verified: base.status === 'active',
+            rating: 0,
+            totalReviews: 0,
+            completedTrips: 0,
+            languages: [base.preferred_locale],
+            memberSince: '已注册用户',
+            responseTime: '待统计',
+            bio: '',
+            interests: Object.keys(traveler.preference_json ?? {}),
+            traveledCountries: 0,
+            plannedTrips: 0,
+            visitedCities: 0,
+          }
+        : null,
+    };
+  }, [profile]);
+
+  const availableRoles = {
+    guide: Boolean(userData?.guide),
+    traveler: Boolean(userData?.traveler),
   };
-
-  const user = userData[viewRole];
+  const user = userData?.[viewRole] ?? userData?.guide ?? userData?.traveler;
 
   const handleRoleSwitch = () => {
+    if (!availableRoles.guide || !availableRoles.traveler) return;
     setIsAnimating(true);
     setTimeout(() => {
       setViewRole(prev => prev === 'guide' ? 'traveler' : 'guide');
@@ -73,61 +127,18 @@ export function UserProfilePage() {
     navigate(-1);
   };
 
-  const recentReviews = [
-    {
-      id: 1,
-      reviewer: {
-        name: '王小明',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=wang',
-        nationality: '🇨🇳',
-      },
-      rating: 5,
-      date: '2026-05-10',
-      route: '上海-苏州-杭州',
-      content: viewRole === 'guide'
-        ? '非常专业的导游！行程安排合理，讲解详细，还推荐了很多当地美食。强烈推荐！'
-        : '很好的旅行伙伴，有趣且随和，一起旅行很愉快！',
-      photos: ['photo1.jpg', 'photo2.jpg'],
-      helpful: 24,
-    },
-    {
-      id: 2,
-      reviewer: {
-        name: '李华',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=lh',
-        nationality: '🇨🇳',
-      },
-      rating: 5,
-      date: '2026-04-25',
-      route: '上海市区游',
-      content: viewRole === 'guide'
-        ? '张导游很守时，服务态度好，对景点非常熟悉。我们一家人玩得很开心。'
-        : '非常棒的旅行者，准时守信，推荐！',
-      photos: [],
-      helpful: 18,
-    },
-    {
-      id: 3,
-      reviewer: {
-        name: '陈敏',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=cm',
-        nationality: '🇨🇳',
-      },
-      rating: 4,
-      date: '2026-04-12',
-      route: '上海-南京',
-      content: '整体不错，就是有一天下雨临时调整了行程，但处理得很好。',
-      photos: ['photo3.jpg'],
-      helpful: 12,
-    },
-  ];
+  const recentReviews: Array<{
+    id: number;
+    reviewer: { name: string; avatar: string; nationality: string };
+    rating: number;
+    date: string;
+    route: string;
+    content: string;
+    photos: string[];
+    helpful: number;
+  }> = [];
 
-  const galleryPhotos = [
-    'https://images.unsplash.com/photo-1548919973-5cef591cdbc9?w=400',
-    'https://images.unsplash.com/photo-1559564484-e48397d3fce0?w=400',
-    'https://images.unsplash.com/photo-1474181487882-5abf3f0ba6c2?w=400',
-    'https://images.unsplash.com/photo-1508804052814-cd3ba865a116?w=400',
-  ];
+  const galleryPhotos: string[] = [];
 
   const getCountryFlag = (lang: string) => {
     const flagMap: { [key: string]: string } = {
@@ -139,6 +150,34 @@ export function UserProfilePage() {
     };
     return flagMap[lang] || '🌐';
   };
+
+  if (loadError) {
+    return (
+      <div className="fixed inset-0 bg-gray-50 z-50">
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 h-14 flex items-center gap-3 z-10">
+          <button onClick={handleBack} className="p-2 -ml-2 hover:bg-gray-100 rounded-lg">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="font-bold flex-1">个人主页</h1>
+        </div>
+        <div className="p-6 text-sm text-red-700">{loadError}</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="fixed inset-0 bg-gray-50 z-50">
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 h-14 flex items-center gap-3 z-10">
+          <button onClick={handleBack} className="p-2 -ml-2 hover:bg-gray-100 rounded-lg">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="font-bold flex-1">个人主页</h1>
+        </div>
+        <div className="p-6 text-sm text-gray-500">正在加载用户资料...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-gray-50 z-50 overflow-y-auto">
@@ -160,7 +199,7 @@ export function UserProfilePage() {
                 <motion.button
                   key={viewRole}
                   onClick={handleRoleSwitch}
-                  disabled={isAnimating}
+                  disabled={isAnimating || !availableRoles.guide || !availableRoles.traveler}
                   initial={{ scale: 0.8, rotate: -180, opacity: 0 }}
                   animate={{ scale: 1, rotate: 0, opacity: 1 }}
                   exit={{ scale: 0.8, rotate: 180, opacity: 0 }}
@@ -192,14 +231,16 @@ export function UserProfilePage() {
               </AnimatePresence>
 
               {/* Tap Hint */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 }}
-                className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded"
-              >
-                点击切换身份
-              </motion.div>
+              {availableRoles.guide && availableRoles.traveler && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                  className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded"
+                >
+                  点击切换身份
+                </motion.div>
+              )}
             </div>
 
             <div className="flex-1 mt-2">
@@ -457,28 +498,7 @@ export function UserProfilePage() {
                   {viewRole === 'guide' && (
                     <div className="bg-white rounded-xl shadow-sm p-6">
                       <h3 className="font-bold mb-4">近期档期</h3>
-                      <div className="grid grid-cols-7 gap-2">
-                        {Array.from({ length: 14 }, (_, i) => {
-                          const date = new Date();
-                          date.setDate(date.getDate() + i);
-                          const isBooked = i % 4 === 0;
-                          return (
-                            <div
-                              key={i}
-                              className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs ${
-                                isBooked
-                                  ? 'bg-gray-200 text-gray-500'
-                                  : 'bg-green-100 text-green-700 border border-green-300'
-                              }`}
-                            >
-                              <span className="font-medium">{date.getDate()}</span>
-                              <span className="text-[10px] mt-0.5">
-                                {isBooked ? '已订' : '可约'}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
+                      <p className="text-sm text-gray-600">真实档期日历还没有接入，当前只展示后端已有的导游资料。</p>
                     </div>
                   )}
                 </div>
@@ -506,11 +526,11 @@ export function UserProfilePage() {
                             <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-yellow-400"
-                                style={{ width: `${star === 5 ? 85 : star === 4 ? 12 : star === 3 ? 2 : 1}%` }}
+                                style={{ width: user.totalReviews > 0 ? `${star === 5 ? 85 : star === 4 ? 12 : star === 3 ? 2 : 1}%` : '0%' }}
                               ></div>
                             </div>
                             <span className="text-sm text-gray-600 w-10 text-right">
-                              {star === 5 ? 108 : star === 4 ? 15 : star === 3 ? 3 : 1}
+                              {user.totalReviews > 0 ? (star === 5 ? 108 : star === 4 ? 15 : star === 3 ? 3 : 1) : 0}
                             </span>
                           </div>
                         ))}
@@ -519,64 +539,77 @@ export function UserProfilePage() {
                   </div>
 
                   {/* Reviews List */}
-                  {recentReviews.map(review => (
-                    <div key={review.id} className="bg-white rounded-xl shadow-sm p-6">
-                      <div className="flex items-start gap-3 mb-3">
-                        <img src={review.reviewer.avatar} alt={review.reviewer.name} className="w-10 h-10 rounded-full" />
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium">{review.reviewer.name}</p>
-                              <span className="text-lg">{review.reviewer.nationality}</span>
+                  {recentReviews.length > 0 ? (
+                    recentReviews.map(review => (
+                      <div key={review.id} className="bg-white rounded-xl shadow-sm p-6">
+                        <div className="flex items-start gap-3 mb-3">
+                          <img src={review.reviewer.avatar} alt={review.reviewer.name} className="w-10 h-10 rounded-full" />
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium">{review.reviewer.name}</p>
+                                <span className="text-lg">{review.reviewer.nationality}</span>
+                              </div>
+                              <span className="text-xs text-gray-500">{review.date}</span>
                             </div>
-                            <span className="text-xs text-gray-500">{review.date}</span>
-                          </div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="flex items-center gap-0.5">
-                              {[1, 2, 3, 4, 5].map(i => (
-                                <Star
-                                  key={i}
-                                  size={12}
-                                  className={i <= review.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}
-                                />
-                              ))}
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="flex items-center gap-0.5">
+                                {[1, 2, 3, 4, 5].map(i => (
+                                  <Star
+                                    key={i}
+                                    size={12}
+                                    className={i <= review.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}
+                                  />
+                                ))}
+                              </div>
+                              <span className="text-xs text-gray-500">· {review.route}</span>
                             </div>
-                            <span className="text-xs text-gray-500">· {review.route}</span>
                           </div>
                         </div>
+                        <p className="text-gray-700 mb-3">{review.content}</p>
+                        {review.photos.length > 0 && (
+                          <div className="flex gap-2 mb-3">
+                            {review.photos.map((photo, i) => (
+                              <div key={i} className="w-20 h-20 bg-gray-200 rounded-lg"></div>
+                            ))}
+                          </div>
+                        )}
+                        <button className="text-sm text-gray-500 hover:text-gray-700">
+                          有帮助 ({review.helpful})
+                        </button>
                       </div>
-                      <p className="text-gray-700 mb-3">{review.content}</p>
-                      {review.photos.length > 0 && (
-                        <div className="flex gap-2 mb-3">
-                          {review.photos.map((photo, i) => (
-                            <div key={i} className="w-20 h-20 bg-gray-200 rounded-lg"></div>
-                          ))}
-                        </div>
-                      )}
-                      <button className="text-sm text-gray-500 hover:text-gray-700">
-                        👍 有帮助 ({review.helpful})
-                      </button>
+                    ))
+                  ) : (
+                    <div className="bg-white rounded-xl shadow-sm p-6 text-sm text-gray-600">
+                      暂无公开评价记录。
                     </div>
-                  ))}
+                  )}
 
-                  {/* View All Link */}
-                  <Link
-                    to={`/user/${user.id}/reviews`}
-                    className="block bg-white rounded-xl shadow-sm p-4 text-center text-blue-600 hover:bg-blue-50 font-medium"
-                  >
-                    查看全部 {user.totalReviews} 条评价
-                    <ChevronRight size={16} className="inline ml-1" />
-                  </Link>
+                  {recentReviews.length > 0 && (
+                    <Link
+                      to={`/user/${user.id}/reviews`}
+                      className="block bg-white rounded-xl shadow-sm p-4 text-center text-blue-600 hover:bg-blue-50 font-medium"
+                    >
+                      查看全部 {user.totalReviews} 条评价
+                      <ChevronRight size={16} className="inline ml-1" />
+                    </Link>
+                  )}
                 </div>
               )}
 
               {activeTab === 'gallery' && (
                 <div className="grid grid-cols-2 gap-4">
-                  {galleryPhotos.map((photo, i) => (
-                    <div key={i} className="aspect-square bg-gray-200 rounded-xl overflow-hidden">
-                      <img src={photo} alt="" className="w-full h-full object-cover" />
+                  {galleryPhotos.length > 0 ? (
+                    galleryPhotos.map((photo, i) => (
+                      <div key={i} className="aspect-square bg-gray-200 rounded-xl overflow-hidden">
+                        <img src={photo} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    ))
+                  ) : (
+                    <div className="col-span-2 bg-white rounded-xl shadow-sm p-6 text-sm text-gray-600">
+                      暂无公开相册。
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </motion.div>

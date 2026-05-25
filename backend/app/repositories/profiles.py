@@ -212,13 +212,18 @@ def get_guide_profile(session: Session, guide_profile_id: UUID) -> dict[str, Any
     row = session.execute(
         text(
             """
-            SELECT id, user_id, market_id, country_code, home_region_id,
-                   daily_price_amount, quote_currency, offers_pickup, gender, birth_year,
-                   language_tags, rating, reputation_status, verification_status,
-                   completed_order_count, cancellation_rate, breach_rate,
-                   average_response_seconds, badge_status, is_listed
-            FROM guide_profiles
-            WHERE id = :profile_id AND deleted_at IS NULL
+            SELECT gp.id, gp.user_id, gp.market_id, gp.country_code, gp.home_region_id,
+                   gp.daily_price_amount, gp.quote_currency, gp.offers_pickup, gp.gender, gp.birth_year,
+                   gp.language_tags, gp.rating, gp.reputation_status, gp.verification_status,
+                   gp.completed_order_count, gp.cancellation_rate, gp.breach_rate,
+                   gp.average_response_seconds, gp.badge_status, gp.is_listed,
+                   u.display_name AS user_display_name,
+                   u.avatar_url AS user_avatar_url,
+                   r.name AS home_region_name
+            FROM guide_profiles gp
+            JOIN users u ON u.id = gp.user_id
+            LEFT JOIN regions r ON r.id = gp.home_region_id
+            WHERE gp.id = :profile_id AND gp.deleted_at IS NULL
             """
         ),
         {"profile_id": guide_profile_id},
@@ -227,6 +232,7 @@ def get_guide_profile(session: Session, guide_profile_id: UUID) -> dict[str, Any
         return None
     profile = _dict(row)
     profile["service_region_ids"] = list_guide_service_region_ids(session, guide_profile_id)
+    profile["service_regions"] = list_guide_service_regions(session, guide_profile_id)
     return profile
 
 
@@ -334,6 +340,22 @@ def list_guide_service_region_ids(session: Session, guide_profile_id: UUID) -> l
         {"profile_id": guide_profile_id},
     )
     return [row[0] for row in rows]
+
+
+def list_guide_service_regions(session: Session, guide_profile_id: UUID) -> list[dict[str, Any]]:
+    rows = session.execute(
+        text(
+            """
+            SELECT r.id, r.name, r.code, r.country_code, r.type
+            FROM guide_service_regions gsr
+            JOIN regions r ON r.id = gsr.region_id
+            WHERE gsr.guide_profile_id = :profile_id
+            ORDER BY r.name
+            """
+        ),
+        {"profile_id": guide_profile_id},
+    )
+    return [_dict(row) for row in rows]
 
 
 def replace_guide_service_regions(

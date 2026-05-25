@@ -65,11 +65,14 @@ export interface TravelPlan {
   id: string;
   market_id: string;
   traveler_user_id: string;
+  traveler_display_name?: string | null;
+  traveler_avatar_url?: string | null;
   country_code?: string;
   status: string;
   title: string | null;
   arrival_date: string;
   arrival_region_id?: string | null;
+  arrival_region_name?: string | null;
   needs_pickup?: boolean;
   traveler_count?: number;
   budget_min_amount?: string | null;
@@ -113,9 +116,12 @@ export interface RouteNodeCreatePayload {
 export interface GuideProfile {
   id: string;
   user_id: string;
+  user_display_name?: string | null;
+  user_avatar_url?: string | null;
   market_id: string;
   country_code: string;
   home_region_id: string;
+  home_region_name?: string | null;
   daily_price_amount: string;
   quote_currency: string;
   offers_pickup: boolean;
@@ -132,17 +138,60 @@ export interface GuideProfile {
   badge_status: string;
   is_listed: boolean;
   service_region_ids: string[];
+  service_regions?: Array<{
+    id: string;
+    name: string;
+    code: string;
+    country_code: string;
+    type: string;
+  }>;
 }
 
 export interface MessageThread {
   id: string;
   market_id: string;
   initiator_user_id: string;
+  initiator_display_name?: string | null;
+  initiator_avatar_url?: string | null;
   recipient_user_id: string;
+  recipient_display_name?: string | null;
+  recipient_avatar_url?: string | null;
   travel_plan_id: string | null;
   order_id?: string | null;
+  is_mutual_follow?: boolean;
+  greeting_sent?: boolean;
+  recipient_replied?: boolean;
   restriction_status: string;
   last_message_at: string | null;
+  last_message_body?: string | null;
+  last_message_sender_user_id?: string | null;
+  last_message_created_at?: string | null;
+}
+
+export interface MessageRecord {
+  id: string;
+  thread_id: string;
+  sender_user_id: string;
+  sender_type: string;
+  body: string;
+  contact_risk_detected: boolean;
+  risk_level: string;
+  created_at: string;
+}
+
+export interface PublicUserProfile {
+  user: {
+    id: string;
+    display_name: string;
+    avatar_url: string | null;
+    preferred_locale: string;
+    preferred_currency: string;
+    risk_level: string;
+    status: string;
+  };
+  roles: UserRoleAssignment[];
+  traveler_profiles: Array<{ id: string; user_id: string; market_id: string; preference_json: Record<string, unknown> }>;
+  guide_profiles: GuideProfile[];
 }
 
 export interface ServiceOrder {

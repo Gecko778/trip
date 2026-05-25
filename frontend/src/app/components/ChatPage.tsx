@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, AlertCircle, Shield, Info, MoreVertical, Flag, UserX } from 'lucide-react';
+import { apiClient, ApiError } from '../api/client';
+import { useApp } from '../App';
+import type { MessageRecord, MessageThread } from '../api/types';
 
 interface Message {
-  id: number;
+  id: string;
   senderId: string;
   content: string;
   time: string;
@@ -12,46 +15,87 @@ interface Message {
 }
 
 const GREETING_LIMIT_MESSAGE = '在对方回复你之前，您最多只能发送这几条消息';
+const fallbackAvatar = (seed: string) => `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`;
+
+function formatMessageTime(value?: string | null) {
+  if (!value) {
+    return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  }
+  return new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function recordToMessage(currentUserId: string) {
+  return (record: MessageRecord): Message => ({
+    id: record.id,
+    senderId: record.sender_user_id === currentUserId ? 'me' : 'other',
+    content: record.body,
+    time: formatMessageTime(record.created_at),
+  });
+}
 
 export function ChatPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { data, user, refreshAppData } = useApp();
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      senderId: 'other',
-      content: '您好，我看到您发布的旅行计划，我可以为您提供导游服务',
-      time: '10:30',
-    },
-    {
-      id: 2,
-      senderId: 'me',
-      content: '您好，请问您的每日价格是多少？',
-      time: '10:32',
-    },
-    {
-      id: 3,
-      senderId: 'other',
-      content: '我的价格是1000元/天，包含全天陪同和行程规划',
-      time: '10:35',
-    },
-  ]);
+  const [thread, setThread] = useState<MessageThread | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isMutualFollow, setIsMutualFollow] = useState(false);
-  const [hasReplied, setHasReplied] = useState(true);
-  const [hasSentGreeting, setHasSentGreeting] = useState(true);
+  const [hasReplied, setHasReplied] = useState(false);
+  const [hasSentGreeting, setHasSentGreeting] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showWarning, setShowWarning] = useState(true);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const otherUserId = thread && user?.id === thread.initiator_user_id
+    ? thread.recipient_user_id
+    : thread?.initiator_user_id ?? id ?? '';
   const otherUser = {
-    name: '张伟',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=zhang',
+    id: otherUserId,
+    name: user?.id === thread?.initiator_user_id
+      ? thread.recipient_display_name ?? `用户 ${otherUserId.slice(0, 4)}`
+      : thread?.initiator_display_name ?? `用户 ${otherUserId.slice(0, 4)}`,
+    avatar: user?.id === thread?.initiator_user_id
+      ? thread.recipient_avatar_url ?? fallbackAvatar(otherUserId)
+      : thread?.initiator_avatar_url ?? fallbackAvatar(otherUserId),
     role: 'guide',
     verified: true,
     rating: 4.9,
   };
+
+  useEffect(() => {
+    let canceled = false;
+    const loadThread = async () => {
+      if (!id || !user) return;
+      setLoadError(null);
+      try {
+        let nextThread: MessageThread;
+        try {
+          nextThread = await apiClient.messageThread(id);
+        } catch (error) {
+          const marketId = data?.selectedMarket?.id;
+          if (!marketId) throw error;
+          nextThread = await apiClient.createMessageThread(marketId, id);
+        }
+        const records = await apiClient.threadMessages(nextThread.id);
+        if (canceled) return;
+        setThread(nextThread);
+        setIsMutualFollow(Boolean(nextThread.is_mutual_follow));
+        setHasReplied(Boolean(nextThread.recipient_replied));
+        setHasSentGreeting(Boolean(nextThread.greeting_sent));
+        setMessages(records.map(recordToMessage(user.id)));
+      } catch (error) {
+        if (canceled) return;
+        setLoadError(error instanceof ApiError ? error.message : '聊天记录加载失败');
+      }
+    };
+    loadThread();
+    return () => {
+      canceled = true;
+    };
+  }, [data?.selectedMarket?.id, id, user]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -69,13 +113,13 @@ export function ChatPage() {
     return patterns.some(pattern => pattern.test(text));
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!message.trim()) return;
 
     // Check for contact information
     if (containsContactInfo(message)) {
       const blockedMessage: Message = {
-        id: messages.length + 1,
+        id: `blocked-${Date.now()}`,
         senderId: 'me',
         content: message,
         time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
@@ -89,28 +133,30 @@ export function ChatPage() {
     }
 
     // Check privacy rules
-    if (!isMutualFollow && !hasReplied && hasSentGreeting) {
+    if (!canSendMessage()) {
       setSendError(GREETING_LIMIT_MESSAGE);
       return;
     }
 
-    const newMessage: Message = {
-      id: messages.length + 1,
-      senderId: 'me',
-      content: message,
-      time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-    };
+    if (!thread || !user) {
+      setSendError('聊天线程还没有加载完成');
+      return;
+    }
 
-    setMessages([...messages, newMessage]);
-    setMessage('');
-    setSendError(null);
-
-    if (!hasSentGreeting) {
+    try {
+      const sent = await apiClient.sendThreadMessage(thread.id, message);
+      setMessages(prev => [...prev, recordToMessage(user.id)(sent)]);
+      setMessage('');
+      setSendError(null);
       setHasSentGreeting(true);
+      await refreshAppData();
+    } catch (error) {
+      setSendError(error instanceof ApiError ? error.message : '消息发送失败');
     }
   };
 
   const canSendMessage = () => {
+    if (thread && user?.id === thread.recipient_user_id) return true;
     if (isMutualFollow) return true;
     if (hasReplied) return true;
     if (!hasSentGreeting) return true;
@@ -126,7 +172,7 @@ export function ChatPage() {
             <ArrowLeft size={28} />
           </button>
           <button
-            onClick={() => navigate(`/user/${id}`)}
+            onClick={() => navigate(`/user/${otherUser.id}`)}
             className="flex items-center gap-3 hover:bg-gray-50 rounded-lg p-1 -ml-1"
           >
             <img src={otherUser.avatar} alt={otherUser.name} className="w-14 h-14 rounded-full" />
@@ -138,7 +184,7 @@ export function ChatPage() {
                 )}
               </div>
               <p className="text-sm text-gray-500">
-                {otherUser.role === 'guide' ? '导游' : '旅行者'} · {otherUser.rating}分
+              {otherUser.role === 'guide' ? '导游' : '旅行者'} · {otherUser.rating}分
               </p>
             </div>
           </button>
@@ -191,6 +237,11 @@ export function ChatPage() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+        {loadError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {loadError}
+          </div>
+        )}
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.senderId === 'me' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[70%] ${msg.senderId === 'me' ? 'order-2' : 'order-1'}`}>
@@ -231,7 +282,7 @@ export function ChatPage() {
       <div className="border-t border-gray-200 bg-white px-4 py-3">
         <div className="flex gap-2 mb-3">
           <button
-            onClick={() => navigate(`/order/new?guideId=${id}`)}
+            onClick={() => navigate(`/order/new?guideId=${otherUser.id}&threadId=${thread?.id ?? ''}`)}
             className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
           >
             创建订单

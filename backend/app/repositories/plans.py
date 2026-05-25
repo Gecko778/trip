@@ -135,12 +135,17 @@ def get_travel_plan(session: Session, travel_plan_id: UUID) -> dict[str, Any] | 
     row = session.execute(
         text(
             """
-            SELECT id, market_id, traveler_user_id, country_code, arrival_date,
-                   arrival_region_id, needs_pickup, traveler_count,
-                   budget_min_amount, budget_max_amount, budget_currency,
-                   visibility, status, title, notes, created_at, updated_at
-            FROM travel_plans
-            WHERE id = :travel_plan_id AND deleted_at IS NULL
+            SELECT tp.id, tp.market_id, tp.traveler_user_id, tp.country_code, tp.arrival_date,
+                   tp.arrival_region_id, tp.needs_pickup, tp.traveler_count,
+                   tp.budget_min_amount, tp.budget_max_amount, tp.budget_currency,
+                   tp.visibility, tp.status, tp.title, tp.notes, tp.created_at, tp.updated_at,
+                   u.display_name AS traveler_display_name,
+                   u.avatar_url AS traveler_avatar_url,
+                   r.name AS arrival_region_name
+            FROM travel_plans tp
+            JOIN users u ON u.id = tp.traveler_user_id
+            LEFT JOIN regions r ON r.id = tp.arrival_region_id
+            WHERE tp.id = :travel_plan_id AND tp.deleted_at IS NULL
             """
         ),
         {"travel_plan_id": travel_plan_id},

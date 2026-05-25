@@ -9,8 +9,10 @@ import type {
   GuideProfile,
   GuideVerification,
   Market,
+  MessageRecord,
   MessageThread,
   NotificationRecord,
+  PublicUserProfile,
   RouteNodeCreatePayload,
   ProfileBundle,
   ReviewRecord,
@@ -126,6 +128,12 @@ export const apiClient = {
   guides(marketId: string) {
     return request<GuideProfile[]>(`/api/v1/markets/${marketId}/guides`);
   },
+  guideProfile(guideProfileId: string) {
+    return request<GuideProfile>(`/api/v1/guides/${guideProfileId}`);
+  },
+  publicUserProfile(userId: string) {
+    return request<PublicUserProfile>(`/api/v1/users/${userId}/public-profile`);
+  },
   travelPlans(marketId: string) {
     return request<TravelPlan[]>(`/api/v1/markets/${marketId}/travel-plans`);
   },
@@ -148,6 +156,24 @@ export const apiClient = {
   },
   messageThreads(marketId: string) {
     return request<MessageThread[]>(`/api/v1/markets/${marketId}/message-threads`);
+  },
+  createMessageThread(marketId: string, recipientUserId: string, travelPlanId?: string | null) {
+    return request<MessageThread>(`/api/v1/markets/${marketId}/message-threads`, {
+      method: 'POST',
+      body: JSON.stringify({ recipient_user_id: recipientUserId, travel_plan_id: travelPlanId ?? null }),
+    });
+  },
+  messageThread(threadId: string) {
+    return request<MessageThread>(`/api/v1/message-threads/${threadId}`);
+  },
+  threadMessages(threadId: string) {
+    return request<MessageRecord[]>(`/api/v1/message-threads/${threadId}/messages`);
+  },
+  sendThreadMessage(threadId: string, body: string) {
+    return request<MessageRecord>(`/api/v1/message-threads/${threadId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    });
   },
   orders(marketId: string) {
     return request<ServiceOrder[]>(`/api/v1/markets/${marketId}/orders`);

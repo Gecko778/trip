@@ -264,12 +264,28 @@ def get_thread(session: Session, thread_id: UUID) -> dict[str, Any] | None:
     row = session.execute(
         text(
             """
-            SELECT id, market_id, initiator_user_id, recipient_user_id, travel_plan_id,
-                   is_mutual_follow, greeting_sent, recipient_replied,
-                   restriction_status, contact_risk_detected, risk_level,
-                   last_message_at, created_at, updated_at
-            FROM message_threads
-            WHERE id = :thread_id AND deleted_at IS NULL
+            SELECT mt.id, mt.market_id, mt.initiator_user_id, mt.recipient_user_id, mt.travel_plan_id,
+                   mt.is_mutual_follow, mt.greeting_sent, mt.recipient_replied,
+                   mt.restriction_status, mt.contact_risk_detected, mt.risk_level,
+                   mt.last_message_at, mt.created_at, mt.updated_at,
+                   iu.display_name AS initiator_display_name,
+                   iu.avatar_url AS initiator_avatar_url,
+                   ru.display_name AS recipient_display_name,
+                   ru.avatar_url AS recipient_avatar_url,
+                   lm.body AS last_message_body,
+                   lm.sender_user_id AS last_message_sender_user_id,
+                   lm.created_at AS last_message_created_at
+            FROM message_threads mt
+            JOIN users iu ON iu.id = mt.initiator_user_id
+            JOIN users ru ON ru.id = mt.recipient_user_id
+            LEFT JOIN LATERAL (
+                SELECT body, sender_user_id, created_at
+                FROM messages
+                WHERE thread_id = mt.id AND deleted_at IS NULL
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) lm ON true
+            WHERE mt.id = :thread_id AND mt.deleted_at IS NULL
             """
         ),
         {"thread_id": thread_id},

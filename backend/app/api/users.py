@@ -8,6 +8,7 @@ from app.core.permissions import get_current_user, require_permission
 from app.core.responses import envelope
 from app.db.deps import get_db_session
 from app.repositories import auth as auth_repository
+from app.repositories import profiles as profile_repository
 from app.schemas.auth import RoleSwitchRequest, UserRoleAssignRequest, UserUpdateRequest
 
 router = APIRouter(prefix="/api/v1", tags=["users"])
@@ -44,6 +45,27 @@ def list_users(
     return envelope(
         data=auth_repository.list_users(session, limit=limit, offset=offset),
         meta={"limit": limit, "offset": offset},
+        trace_id=request.state.trace_id,
+    )
+
+
+@router.get("/users/{user_id}/public-profile")
+def get_public_user_profile(
+    user_id: UUID,
+    request: Request,
+    _current_user: dict = Depends(get_current_user),
+    session: Session = Depends(get_db_session),
+) -> dict:
+    user = auth_repository.get_user(session, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return envelope(
+        data={
+            "user": user,
+            "roles": auth_repository.list_user_roles(session, user_id),
+            "traveler_profiles": profile_repository.list_traveler_profiles(session, user_id),
+            "guide_profiles": profile_repository.list_guide_profiles(session, user_id),
+        },
         trace_id=request.state.trace_id,
     )
 
