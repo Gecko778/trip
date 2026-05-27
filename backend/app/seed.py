@@ -411,7 +411,8 @@ def _seed_users_and_profiles(session: Session) -> None:
                     gender, birth_year, language_tags, rating,
                     reputation_status, verification_status, completed_order_count,
                     cancellation_rate, breach_rate, average_response_seconds,
-                    badge_status, is_listed, created_by, updated_by
+                    badge_status, is_listed, created_by, updated_by,
+                    service_scope_modes
                 )
                 VALUES (
                     :id, :user_id, :market_id, 'CN', :home_region_id,
@@ -419,7 +420,8 @@ def _seed_users_and_profiles(session: Session) -> None:
                     :gender, :birth_year, :language_tags, :rating,
                     'active', :verification_status, :completed_order_count,
                     0.0200, 0.0000, :average_response_seconds,
-                    :badge_status, true, :user_id, :user_id
+                    :badge_status, true, :user_id, :user_id,
+                    ARRAY['point_to_point', 'full_route']::TEXT[]
                 )
                 ON CONFLICT (user_id, market_id) DO UPDATE
                 SET country_code = EXCLUDED.country_code,
@@ -437,6 +439,7 @@ def _seed_users_and_profiles(session: Session) -> None:
                     average_response_seconds = EXCLUDED.average_response_seconds,
                     badge_status = EXCLUDED.badge_status,
                     is_listed = EXCLUDED.is_listed,
+                    service_scope_modes = EXCLUDED.service_scope_modes,
                     updated_at = now()
                 """
             ),
@@ -469,6 +472,37 @@ def _seed_users_and_profiles(session: Session) -> None:
                 ),
                 {"guide_profile_id": guide_profile_id, "region_id": region_id},
             )
+        session.execute(
+            text(
+                """
+                INSERT INTO guide_availability_windows (
+                    id, market_id, guide_user_id, region_id,
+                    available_start_date, available_end_date,
+                    status, note, created_by, updated_by
+                )
+                VALUES (
+                    :id, :market_id, :guide_user_id, :region_id,
+                    :start_date, :end_date,
+                    'available', 'Demo availability window for role-aware discovery.',
+                    :guide_user_id, :guide_user_id
+                )
+                ON CONFLICT (id) DO UPDATE
+                SET available_start_date = EXCLUDED.available_start_date,
+                    available_end_date = EXCLUDED.available_end_date,
+                    status = EXCLUDED.status,
+                    note = EXCLUDED.note,
+                    updated_at = now()
+                """
+            ),
+            {
+                "id": f"23000000-0000-0000-0000-{index:012d}",
+                "market_id": CHINA_INBOUND_MARKET_ID,
+                "guide_user_id": guide_id,
+                "region_id": home_region,
+                "start_date": date.today(),
+                "end_date": date.today() + timedelta(days=90),
+            },
+        )
         if index <= 6:
             status = "approved" if index <= 3 else "pending"
             session.execute(
@@ -534,6 +568,7 @@ def _seed_demo_flow(session: Session) -> None:
     for index, route in enumerate(routes, start=1):
         traveler_id = f"10000000-0000-0000-0000-{index:012d}"
         plan_id = f"30000000-0000-0000-0000-{index:012d}"
+        arrival_offset_days = 21 if index == 3 else 20 + index
         plan_ids.append(plan_id)
         session.execute(
             text(
@@ -542,13 +577,15 @@ def _seed_demo_flow(session: Session) -> None:
                     id, market_id, traveler_user_id, country_code,
                     arrival_date, arrival_region_id, needs_pickup, traveler_count,
                     budget_min_amount, budget_max_amount, budget_currency,
-                    visibility, status, title, notes, created_by, updated_by
+                    visibility, status, title, notes, looking_for_partner,
+                    partner_note, guide_hiring_mode, created_by, updated_by
                 )
                 VALUES (
                     :id, :market_id, :traveler_user_id, 'CN',
                     :arrival_date, :arrival_region_id, :needs_pickup, :traveler_count,
                     :budget_min_amount, :budget_max_amount, 'CNY',
-                    'guides_only', 'active', :title, :notes, :traveler_user_id, :traveler_user_id
+                    'private', 'active', :title, :notes, :looking_for_partner,
+                    :partner_note, :guide_hiring_mode, :traveler_user_id, :traveler_user_id
                 )
                 ON CONFLICT (id) DO UPDATE
                 SET arrival_date = EXCLUDED.arrival_date,
@@ -557,6 +594,9 @@ def _seed_demo_flow(session: Session) -> None:
                     traveler_count = EXCLUDED.traveler_count,
                     budget_min_amount = EXCLUDED.budget_min_amount,
                     budget_max_amount = EXCLUDED.budget_max_amount,
+                    looking_for_partner = EXCLUDED.looking_for_partner,
+                    partner_note = EXCLUDED.partner_note,
+                    guide_hiring_mode = EXCLUDED.guide_hiring_mode,
                     status = EXCLUDED.status,
                     title = EXCLUDED.title,
                     notes = EXCLUDED.notes,
@@ -567,19 +607,38 @@ def _seed_demo_flow(session: Session) -> None:
                 "id": plan_id,
                 "market_id": CHINA_INBOUND_MARKET_ID,
                 "traveler_user_id": traveler_id,
-                "arrival_date": today + timedelta(days=20 + index),
+                "arrival_date": today + timedelta(days=arrival_offset_days),
                 "arrival_region_id": route[1],
                 "needs_pickup": index % 2 == 1,
                 "traveler_count": route[3],
                 "budget_min_amount": route[4],
                 "budget_max_amount": route[5],
                 "title": route[0],
+                "looking_for_partner": index in {1, 2, 3},
+                "partner_note": "Open to meeting travelers with overlapping city dates." if index in {1, 2, 3} else None,
+                "guide_hiring_mode": "full_route" if index in {3, 10} else "point_to_point",
                 "notes": "Demo travel plan for stable M11 screenshots.",
             },
         )
-        _upsert_route_node(session, plan_id, 1, route[1], today + timedelta(days=20 + index), route[0])
+        _upsert_route_node(
+            session,
+            plan_id,
+            1,
+            route[1],
+            today + timedelta(days=arrival_offset_days),
+            route[0],
+            looking_for_partner=index in {1, 2, 3},
+        )
         if route[2] != route[1]:
-            _upsert_route_node(session, plan_id, 2, route[2], today + timedelta(days=21 + index), route[0])
+            _upsert_route_node(
+                session,
+                plan_id,
+                2,
+                route[2],
+                today + timedelta(days=arrival_offset_days + 1),
+                route[0],
+                looking_for_partner=index in {1, 2, 3},
+            )
 
     thread_ids = []
     for index in range(1, 6):
@@ -789,23 +848,33 @@ def _upsert_role_profile(session: Session, user_id: UUID | str, role: str, marke
     )
 
 
-def _upsert_route_node(session: Session, plan_id: str, sequence: int, region_id: str, route_date: date, notes: str) -> None:
+def _upsert_route_node(
+    session: Session,
+    plan_id: str,
+    sequence: int,
+    region_id: str,
+    route_date: date,
+    notes: str,
+    *,
+    looking_for_partner: bool = False,
+) -> None:
     session.execute(
         text(
             """
             INSERT INTO itinerary_route_nodes (
                 id, travel_plan_id, region_id, sequence,
-                planned_start_at, planned_end_at, notes
+                planned_start_at, planned_end_at, notes, place_name, looking_for_partner
             )
             VALUES (
                 :id, :travel_plan_id, :region_id, :sequence,
-                :start_at, :end_at, :notes
+                :start_at, :end_at, :notes, NULL, :looking_for_partner
             )
             ON CONFLICT (travel_plan_id, sequence) DO UPDATE
             SET region_id = EXCLUDED.region_id,
                 planned_start_at = EXCLUDED.planned_start_at,
                 planned_end_at = EXCLUDED.planned_end_at,
                 notes = EXCLUDED.notes,
+                looking_for_partner = EXCLUDED.looking_for_partner,
                 updated_at = now()
             """
         ),
@@ -817,6 +886,7 @@ def _upsert_route_node(session: Session, plan_id: str, sequence: int, region_id:
             "start_at": route_date.isoformat(),
             "end_at": route_date.isoformat(),
             "notes": notes,
+            "looking_for_partner": looking_for_partner,
         },
     )
 

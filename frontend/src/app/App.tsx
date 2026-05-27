@@ -114,7 +114,7 @@ export default function App() {
   const [apiError, setApiError] = useState<string | null>(null);
 
   const refreshAppData = async () => {
-    const bootstrap = await apiClient.bootstrap();
+    const bootstrap = await apiClient.bootstrap(role);
     setData(bootstrap);
   };
 
@@ -125,10 +125,13 @@ export default function App() {
         return;
       }
       try {
-        const [me] = await Promise.all([apiClient.me(), refreshAppData()]);
+        const me = await apiClient.me();
         setUser(me);
         const hasGuideRole = me.roles.some(item => item.code === 'guide');
-        setRole(hasGuideRole ? 'guide' : 'traveler');
+        const initialRole = hasGuideRole ? 'guide' : 'traveler';
+        setRole(initialRole);
+        const bootstrap = await apiClient.bootstrap(initialRole);
+        setData(bootstrap);
       } catch (error) {
         clearTokens();
         setUser(null);
@@ -149,10 +152,10 @@ export default function App() {
       setUser(result.user);
       setRole(nextRole);
       setApiError(null);
-      await refreshAppData();
+      const bootstrap = await apiClient.bootstrap(nextRole);
+      setData(bootstrap);
     } catch (error) {
       setApiError(error instanceof ApiError ? error.message : '身份切换失败，请稍后重试');
-      setRole(nextRole);
     }
   };
 
@@ -161,8 +164,10 @@ export default function App() {
     setUser(auth.user);
     setApiError(null);
     const hasGuideRole = auth.user.roles.some(item => item.code === 'guide');
-    setRole(hasGuideRole ? 'guide' : 'traveler');
-    await refreshAppData();
+    const initialRole = hasGuideRole ? 'guide' : 'traveler';
+    setRole(initialRole);
+    const bootstrap = await apiClient.bootstrap(initialRole);
+    setData(bootstrap);
   };
 
   const logout = () => {

@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 Gender = Literal["unknown", "female", "male", "non_binary", "prefer_not_to_say"]
+ServiceScopeMode = Literal["point_to_point", "full_route"]
 OnboardingStatus = Literal[
     "draft",
     "submitted",
@@ -38,6 +39,7 @@ class GuideProfileCreateRequest(BaseModel):
     birth_year: int | None = Field(default=None, ge=1900, le=2100)
     language_tags: list[str] = Field(default_factory=list)
     service_region_ids: list[UUID] = Field(default_factory=list)
+    service_scope_modes: list[ServiceScopeMode] = Field(default_factory=lambda: ["point_to_point"])
 
 
 class GuideProfileUpdateRequest(BaseModel):
@@ -49,6 +51,7 @@ class GuideProfileUpdateRequest(BaseModel):
     birth_year: int | None = Field(default=None, ge=1900, le=2100)
     language_tags: list[str] | None = None
     service_region_ids: list[UUID] | None = None
+    service_scope_modes: list[ServiceScopeMode] | None = None
 
 
 class OnboardingUpdateRequest(BaseModel):

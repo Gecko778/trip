@@ -158,17 +158,20 @@ def create_guide_profile(
     birth_year: int | None,
     language_tags: list[str],
     service_region_ids: list[UUID],
+    service_scope_modes: list[str],
 ) -> dict[str, Any]:
     row = session.execute(
         text(
             """
             INSERT INTO guide_profiles (
                 user_id, market_id, country_code, home_region_id, daily_price_amount,
-                quote_currency, offers_pickup, gender, birth_year, language_tags
+                quote_currency, offers_pickup, gender, birth_year, language_tags,
+                service_scope_modes
             )
             VALUES (
                 :user_id, :market_id, :country_code, :home_region_id, :daily_price_amount,
-                :quote_currency, :offers_pickup, :gender, :birth_year, :language_tags
+                :quote_currency, :offers_pickup, :gender, :birth_year, :language_tags,
+                :service_scope_modes
             )
             ON CONFLICT (user_id, market_id) DO UPDATE
             SET country_code = EXCLUDED.country_code,
@@ -179,12 +182,13 @@ def create_guide_profile(
                 gender = EXCLUDED.gender,
                 birth_year = EXCLUDED.birth_year,
                 language_tags = EXCLUDED.language_tags,
+                service_scope_modes = EXCLUDED.service_scope_modes,
                 updated_at = now()
             RETURNING id, user_id, market_id, country_code, home_region_id,
                       daily_price_amount, quote_currency, offers_pickup, gender, birth_year,
                       language_tags, rating, reputation_status, verification_status,
                       completed_order_count, cancellation_rate, breach_rate,
-                      average_response_seconds, badge_status, is_listed
+                      average_response_seconds, badge_status, is_listed, service_scope_modes
             """
         ),
         {
@@ -198,6 +202,7 @@ def create_guide_profile(
             "gender": gender,
             "birth_year": birth_year,
             "language_tags": language_tags,
+            "service_scope_modes": service_scope_modes,
         },
     ).first()
     if row is None:
@@ -217,6 +222,7 @@ def get_guide_profile(session: Session, guide_profile_id: UUID) -> dict[str, Any
                    gp.language_tags, gp.rating, gp.reputation_status, gp.verification_status,
                    gp.completed_order_count, gp.cancellation_rate, gp.breach_rate,
                    gp.average_response_seconds, gp.badge_status, gp.is_listed,
+                   gp.service_scope_modes,
                    u.display_name AS user_display_name,
                    u.avatar_url AS user_avatar_url,
                    r.name AS home_region_name
@@ -285,6 +291,7 @@ def update_guide_profile(
     birth_year: int | None,
     language_tags: list[str] | None,
     service_region_ids: list[UUID] | None,
+    service_scope_modes: list[str] | None,
 ) -> dict[str, Any] | None:
     current = get_guide_profile(session, guide_profile_id)
     if current is None:
@@ -300,6 +307,7 @@ def update_guide_profile(
                 gender = :gender,
                 birth_year = :birth_year,
                 language_tags = :language_tags,
+                service_scope_modes = :service_scope_modes,
                 updated_at = now()
             WHERE id = :profile_id AND deleted_at IS NULL
             RETURNING id
@@ -318,6 +326,9 @@ def update_guide_profile(
             "gender": gender or current["gender"],
             "birth_year": birth_year if birth_year is not None else current["birth_year"],
             "language_tags": language_tags if language_tags is not None else current["language_tags"],
+            "service_scope_modes": service_scope_modes
+            if service_scope_modes is not None
+            else current["service_scope_modes"],
         },
     ).first()
     if row is None:

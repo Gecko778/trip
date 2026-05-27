@@ -286,8 +286,6 @@ def switch_role_profile(
     *,
     market_id: UUID | None = None,
 ) -> dict[str, Any]:
-    assign_role(session, user_id, role_code, market_id=market_id)
-    create_role_profile(session, user_id, role_code, market_id=market_id)
     session.execute(
         text(
             """
@@ -332,6 +330,29 @@ def switch_role_profile(
     if row is None:
         raise RuntimeError("Failed to switch role profile")
     return _dict(row)
+
+
+def user_has_role(session: Session, user_id: UUID, role_code: str, market_id: UUID | None = None) -> bool:
+    row = session.execute(
+        text(
+            """
+            SELECT 1
+            FROM user_roles ur
+            JOIN roles r ON r.id = ur.role_id
+            WHERE ur.user_id = :user_id
+              AND r.code = :role_code
+              AND ur.deleted_at IS NULL
+              AND (
+                  :market_id IS NULL
+                  OR ur.market_id = :market_id
+                  OR ur.scope_type = 'global'
+              )
+            LIMIT 1
+            """
+        ),
+        {"user_id": user_id, "role_code": role_code, "market_id": market_id},
+    ).first()
+    return row is not None
 
 
 def get_role(session: Session, role_code: str) -> dict[str, Any] | None:

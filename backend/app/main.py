@@ -8,6 +8,7 @@ from app.api.markets import router as markets_router
 from app.api.orders import router as orders_router
 from app.api.plans import router as plans_router
 from app.api.profiles import router as profiles_router
+from app.api.role_visibility import router as role_visibility_router
 from app.api.system import router as system_router
 from app.api.users import router as users_router
 from app.core.config import settings
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
     app.include_router(orders_router)
     app.include_router(plans_router)
     app.include_router(profiles_router)
+    app.include_router(role_visibility_router)
     app.include_router(system_router)
     app.include_router(users_router)
     return app

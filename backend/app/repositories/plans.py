@@ -27,6 +27,9 @@ def create_travel_plan(
     visibility: str,
     title: str | None,
     notes: str | None,
+    looking_for_partner: bool = False,
+    partner_note: str | None = None,
+    guide_hiring_mode: str = "point_to_point",
 ) -> dict[str, Any]:
     row = session.execute(
         text(
@@ -35,13 +38,16 @@ def create_travel_plan(
                 market_id, traveler_user_id, country_code, arrival_date,
                 arrival_region_id, needs_pickup, traveler_count,
                 budget_min_amount, budget_max_amount, budget_currency,
-                visibility, title, notes, created_by
+                visibility, title, notes, looking_for_partner, partner_note,
+                guide_hiring_mode, created_by
             )
             VALUES (
                 :market_id, :traveler_user_id, :country_code, :arrival_date,
                 :arrival_region_id, :needs_pickup, :traveler_count,
                 :budget_min_amount, :budget_max_amount, :budget_currency,
-                CAST(:visibility AS visibility_enum), :title, :notes, :traveler_user_id
+                CAST(:visibility AS visibility_enum), :title, :notes,
+                :looking_for_partner, :partner_note, :guide_hiring_mode,
+                :traveler_user_id
             )
             RETURNING id
             """
@@ -60,6 +66,9 @@ def create_travel_plan(
             "visibility": visibility,
             "title": title,
             "notes": notes,
+            "looking_for_partner": looking_for_partner,
+            "partner_note": partner_note,
+            "guide_hiring_mode": guide_hiring_mode,
         },
     ).first()
     if row is None:
@@ -138,7 +147,10 @@ def get_travel_plan(session: Session, travel_plan_id: UUID) -> dict[str, Any] | 
             SELECT tp.id, tp.market_id, tp.traveler_user_id, tp.country_code, tp.arrival_date,
                    tp.arrival_region_id, tp.needs_pickup, tp.traveler_count,
                    tp.budget_min_amount, tp.budget_max_amount, tp.budget_currency,
-                   tp.visibility, tp.status, tp.title, tp.notes, tp.created_at, tp.updated_at,
+                   tp.visibility, tp.status, tp.title, tp.notes,
+                   tp.looking_for_partner, tp.partner_note,
+                   tp.guide_hiring_mode,
+                   tp.created_at, tp.updated_at,
                    u.display_name AS traveler_display_name,
                    u.avatar_url AS traveler_avatar_url,
                    r.name AS arrival_region_name
@@ -172,6 +184,9 @@ def update_travel_plan(
     visibility: str | None,
     title: str | None,
     notes: str | None,
+    looking_for_partner: bool | None,
+    partner_note: str | None,
+    guide_hiring_mode: str | None,
     updated_by: UUID,
 ) -> dict[str, Any] | None:
     current = get_travel_plan(session, travel_plan_id)
@@ -192,6 +207,9 @@ def update_travel_plan(
                 visibility = CAST(:visibility AS visibility_enum),
                 title = :title,
                 notes = :notes,
+                looking_for_partner = :looking_for_partner,
+                partner_note = :partner_note,
+                guide_hiring_mode = :guide_hiring_mode,
                 updated_by = :updated_by,
                 updated_at = now()
             WHERE id = :travel_plan_id AND deleted_at IS NULL
@@ -215,6 +233,11 @@ def update_travel_plan(
             "visibility": visibility or current["visibility"],
             "title": title if title is not None else current["title"],
             "notes": notes if notes is not None else current["notes"],
+            "looking_for_partner": looking_for_partner
+            if looking_for_partner is not None
+            else current["looking_for_partner"],
+            "partner_note": partner_note if partner_note is not None else current["partner_note"],
+            "guide_hiring_mode": guide_hiring_mode or current["guide_hiring_mode"],
             "updated_by": updated_by,
         },
     ).first()
@@ -249,7 +272,8 @@ def list_route_nodes(session: Session, travel_plan_id: UUID) -> list[dict[str, A
         text(
             """
             SELECT id, travel_plan_id, region_id, sequence, planned_start_at,
-                   planned_end_at, notes, created_at, updated_at
+                   planned_end_at, notes, place_name, looking_for_partner,
+                   created_at, updated_at
             FROM itinerary_route_nodes
             WHERE travel_plan_id = :travel_plan_id
             ORDER BY sequence
@@ -265,7 +289,8 @@ def get_route_node(session: Session, route_node_id: UUID) -> dict[str, Any] | No
         text(
             """
             SELECT id, travel_plan_id, region_id, sequence, planned_start_at,
-                   planned_end_at, notes, created_at, updated_at
+                   planned_end_at, notes, place_name, looking_for_partner,
+                   created_at, updated_at
             FROM itinerary_route_nodes
             WHERE id = :route_node_id
             """
@@ -284,16 +309,20 @@ def create_route_node(
     planned_start_at: datetime | None,
     planned_end_at: datetime | None,
     notes: str | None,
+    place_name: str | None,
+    looking_for_partner: bool,
 ) -> dict[str, Any]:
     row = session.execute(
         text(
             """
             INSERT INTO itinerary_route_nodes (
-                travel_plan_id, region_id, sequence, planned_start_at, planned_end_at, notes
+                travel_plan_id, region_id, sequence, planned_start_at, planned_end_at,
+                notes, place_name, looking_for_partner
             )
             VALUES (
                 :travel_plan_id, :region_id, :sequence,
-                :planned_start_at, :planned_end_at, :notes
+                :planned_start_at, :planned_end_at, :notes,
+                :place_name, :looking_for_partner
             )
             RETURNING id
             """
@@ -305,6 +334,8 @@ def create_route_node(
             "planned_start_at": planned_start_at,
             "planned_end_at": planned_end_at,
             "notes": notes,
+            "place_name": place_name,
+            "looking_for_partner": looking_for_partner,
         },
     ).first()
     if row is None:
@@ -321,6 +352,8 @@ def update_route_node(
     planned_start_at: datetime | None,
     planned_end_at: datetime | None,
     notes: str | None,
+    place_name: str | None,
+    looking_for_partner: bool | None,
 ) -> dict[str, Any] | None:
     current = get_route_node(session, route_node_id)
     if current is None:
@@ -334,6 +367,8 @@ def update_route_node(
                 planned_start_at = :planned_start_at,
                 planned_end_at = :planned_end_at,
                 notes = :notes,
+                place_name = :place_name,
+                looking_for_partner = :looking_for_partner,
                 updated_at = now()
             WHERE id = :route_node_id
             RETURNING id
@@ -350,6 +385,10 @@ def update_route_node(
             if planned_end_at is not None
             else current["planned_end_at"],
             "notes": notes if notes is not None else current["notes"],
+            "place_name": place_name if place_name is not None else current["place_name"],
+            "looking_for_partner": looking_for_partner
+            if looking_for_partner is not None
+            else current["looking_for_partner"],
         },
     ).first()
     return get_route_node(session, row[0]) if row else None

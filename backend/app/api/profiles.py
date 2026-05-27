@@ -153,6 +153,7 @@ def create_my_guide_profile(
             birth_year=payload.birth_year,
             language_tags=payload.language_tags,
             service_region_ids=payload.service_region_ids,
+            service_scope_modes=payload.service_scope_modes,
         )
         session.commit()
     except IntegrityError as exc:
@@ -222,6 +223,7 @@ def update_guide_profile(
             birth_year=payload.birth_year,
             language_tags=payload.language_tags,
             service_region_ids=payload.service_region_ids,
+            service_scope_modes=payload.service_scope_modes,
         )
         session.commit()
     except IntegrityError as exc:

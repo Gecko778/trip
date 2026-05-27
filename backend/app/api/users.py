@@ -21,6 +21,8 @@ def switch_my_role(
     current_user: dict = Depends(get_current_user),
     session: Session = Depends(get_db_session),
 ) -> dict:
+    if not auth_repository.user_has_role(session, current_user["id"], payload.role, payload.market_id):
+        raise HTTPException(status_code=403, detail="当前账号未开通该身份，请先完成对应身份资料/认证")
     profile = auth_repository.switch_role_profile(
         session,
         current_user["id"],

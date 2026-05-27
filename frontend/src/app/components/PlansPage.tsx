@@ -1,10 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Plus, Minus, Calendar, MapPin, Users, DollarSign, Plane, Edit2, Trash2, CheckCircle, FileText, ArrowLeft, Save, Send, AlertCircle } from 'lucide-react';
 import { useApp } from '../App';
 import { apiClient, ApiError } from '../api/client';
-import type { PlanVisibility } from '../api/types';
+import type { GuideHiringMode, GuideServiceScopeMode, PlanVisibility, Region } from '../api/types';
 import { motion, AnimatePresence } from 'motion/react';
+
+interface RouteStopData {
+  id: string;
+  regionId: string | null;
+  placeName: string;
+  startDate: string;
+  endDate: string;
+  lookingForPartner: boolean;
+}
 
 interface PlanData {
   id?: number | string;
@@ -16,6 +25,8 @@ interface PlanData {
   travelers: number;
   budget: string;
   visibility: string;
+  guideHiringMode: GuideHiringMode;
+  routeStops: RouteStopData[];
   notes?: string;
 }
 
@@ -32,64 +43,247 @@ interface ServiceData {
   pricePerDay: number;
   airportPickup: boolean;
   availability: string;
+  serviceScopeModes: GuideServiceScopeMode[];
   activeOrders: number;
   upcomingBookings: number;
+  profileId?: string;
 }
 
 interface PlanFormFieldsProps {
   formData: PlanData;
   setFormData: Dispatch<SetStateAction<PlanData>>;
+  regions: Region[];
 }
 
-function FormFields({ formData, setFormData }: PlanFormFieldsProps) {
+const serviceModeLabels: Record<GuideServiceScopeMode, string> = {
+  point_to_point: '单一地区',
+  full_route: '整条路线',
+};
+
+function FormFields({ formData, setFormData, regions }: PlanFormFieldsProps) {
+  const [isAddingStop, setIsAddingStop] = useState(false);
+  const [stopDraft, setStopDraft] = useState<RouteStopData>({
+    id: '',
+    regionId: '',
+    placeName: '',
+    startDate: '',
+    endDate: '',
+    lookingForPartner: false,
+  });
+  const cityRegions = regions.filter(region => region.type === 'city' || region.type === 'district');
+
+  const resetStopDraft = () => {
+    setStopDraft({
+      id: '',
+      regionId: '',
+      placeName: '',
+      startDate: '',
+      endDate: '',
+      lookingForPartner: false,
+    });
+  };
+
+  const addStop = () => {
+    const selectedRegion = cityRegions.find(region => region.id === stopDraft.regionId);
+    const placeName = selectedRegion?.name ?? stopDraft.placeName.trim();
+    if (!stopDraft.regionId || !placeName || !stopDraft.startDate || !stopDraft.endDate) {
+      return;
+    }
+    if (stopDraft.startDate > stopDraft.endDate) {
+      return;
+    }
+    const nextStop = {
+      ...stopDraft,
+      id: `local-${Date.now()}`,
+      placeName,
+    };
+    const routeStops = [...formData.routeStops, nextStop];
+    setFormData({
+      ...formData,
+      routeStops,
+      route: routeStops.map(stop => stop.placeName).join(' → '),
+      startDate: routeStops[0]?.startDate ?? '',
+      endDate: routeStops[routeStops.length - 1]?.endDate ?? '',
+      arrivalPoint: routeStops[0]?.placeName ?? '',
+    });
+    resetStopDraft();
+    setIsAddingStop(false);
+  };
+
+  const removeStop = (stopId: string) => {
+    const routeStops = formData.routeStops.filter(stop => stop.id !== stopId);
+    setFormData({
+      ...formData,
+      routeStops,
+      route: routeStops.map(stop => stop.placeName).join(' → '),
+      startDate: routeStops[0]?.startDate ?? '',
+      endDate: routeStops[routeStops.length - 1]?.endDate ?? '',
+      arrivalPoint: routeStops[0]?.placeName ?? '',
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium mb-2">旅行路线</label>
-        <input
-          type="text"
-          placeholder="例: 上海 → 北京 → 上海"
-          value={formData.route}
-          onChange={(e) => setFormData({ ...formData, route: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          required
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm font-medium mb-2">到达日期</label>
-          <input
-            type="date"
-            value={formData.startDate}
-            onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-2">离开日期</label>
-          <input
-            type="date"
-            value={formData.endDate}
-            onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
+        <label className="block text-sm font-medium mb-2">招揽导游方式</label>
+        <div className="grid grid-cols-2 gap-3">
+          {([
+            ['point_to_point', '点对点', '每个地点可匹配不同导游'],
+            ['full_route', '整条线路', '整条路线由同一导游服务'],
+          ] as const).map(([value, label, description]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setFormData({ ...formData, guideHiringMode: value })}
+              className={`rounded-lg border-2 p-3 text-left transition-colors ${
+                formData.guideHiringMode === value
+                  ? 'border-blue-600 bg-blue-50 text-blue-700'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className="font-semibold">{label}</div>
+              <div className="text-xs text-gray-500">{description}</div>
+            </button>
+          ))}
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-2">接 / 送地点（选填）</label>
-        <input
-          type="text"
-          placeholder="例: 上海浦东机场"
-          value={formData.arrivalPoint}
-          onChange={(e) => setFormData({ ...formData, arrivalPoint: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+        <div className="flex items-center justify-between mb-3">
+          <label className="block text-sm font-medium">行程地点</label>
+          <button
+            type="button"
+            onClick={() => setIsAddingStop(true)}
+            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm font-medium"
+          >
+            <Plus size={16} />
+            添加地点
+          </button>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 p-4">
+          {formData.routeStops.length === 0 ? (
+            <p className="text-sm text-gray-500">还没有地点。请点击“添加地点”逐个设置城市、到达时间和离开时间。</p>
+          ) : (
+            <div className="space-y-0">
+              {formData.routeStops.map((stop, index) => (
+                <div key={stop.id} className="relative flex gap-3 pb-5 last:pb-0">
+                  {index < formData.routeStops.length - 1 && (
+                    <div className="absolute left-[11px] top-7 bottom-0 w-px bg-blue-200" />
+                  )}
+                  <div className="relative z-10 mt-1 h-6 w-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center">
+                    {index + 1}
+                  </div>
+                  <div className="flex-1 rounded-lg bg-gray-50 px-3 py-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold">{stop.placeName}</div>
+                        <div className="text-sm text-gray-600">{stop.startDate} - {stop.endDate}</div>
+                        {stop.lookingForPartner && (
+                          <div className="mt-1 text-xs text-green-700">已开启 looking for partner</div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeStop(stop.id)}
+                        className="p-1 text-gray-400 hover:text-red-600"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+
+      <AnimatePresence>
+        {isAddingStop && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">添加地点</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  resetStopDraft();
+                  setIsAddingStop(false);
+                }}
+                className="p-1 text-gray-500 hover:text-gray-800"
+              >
+                <Minus size={16} />
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">选择地点</label>
+              <select
+                value={stopDraft.regionId ?? ''}
+                onChange={(event) => {
+                  const region = cityRegions.find(item => item.id === event.target.value);
+                  setStopDraft({
+                    ...stopDraft,
+                    regionId: event.target.value,
+                    placeName: region?.name ?? '',
+                  });
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">请选择城市 / 地区</option>
+                {cityRegions.map(region => (
+                  <option key={region.id} value={region.id}>{region.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-2">到达日期</label>
+                <input
+                  type="date"
+                  value={stopDraft.startDate}
+                  onChange={(e) => setStopDraft({ ...stopDraft, startDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">离开日期</label>
+                <input
+                  type="date"
+                  value={stopDraft.endDate}
+                  onChange={(e) => setStopDraft({ ...stopDraft, endDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={stopDraft.lookingForPartner}
+                onChange={(e) => setStopDraft({ ...stopDraft, lookingForPartner: e.target.checked })}
+                className="w-4 h-4 accent-blue-600"
+              />
+              <span className="text-sm">此地点寻找旅伴 looking for partner</span>
+            </label>
+
+            <button
+              type="button"
+              onClick={addStop}
+              className="w-full py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            >
+              确定
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div>
         <label className="flex items-center gap-2 cursor-pointer">
@@ -168,6 +362,7 @@ export function PlansPage() {
     pricePerDay: 0,
     airportPickup: false,
     availability: 'available',
+    serviceScopeModes: ['point_to_point'],
   });
   const [serviceAreasInput, setServiceAreasInput] = useState('');
   const [formData, setFormData] = useState<PlanData>({
@@ -179,6 +374,8 @@ export function PlansPage() {
     travelers: 1,
     budget: '',
     visibility: 'all',
+    guideHiringMode: 'point_to_point',
+    routeStops: [],
     notes: '',
   });
 
@@ -192,6 +389,12 @@ export function PlansPage() {
       needsPickup: true,
       budget: '3000-5000',
       travelers: 2,
+      visibility: 'all',
+      guideHiringMode: 'full_route',
+      routeStops: [
+        { id: 'mock-1-1', regionId: null, placeName: '上海', startDate: '2026-06-15', endDate: '2026-06-16', lookingForPartner: false },
+        { id: 'mock-1-2', regionId: null, placeName: '北京', startDate: '2026-06-17', endDate: '2026-06-18', lookingForPartner: false },
+      ],
       status: 'published',
       interestedGuides: 5,
     },
@@ -204,6 +407,12 @@ export function PlansPage() {
       needsPickup: false,
       budget: '2000-3000',
       travelers: 1,
+      visibility: 'all',
+      guideHiringMode: 'point_to_point',
+      routeStops: [
+        { id: 'mock-2-1', regionId: null, placeName: '杭州', startDate: '2026-07-01', endDate: '2026-07-02', lookingForPartner: true },
+        { id: 'mock-2-2', regionId: null, placeName: '苏州', startDate: '2026-07-03', endDate: '2026-07-03', lookingForPartner: true },
+      ],
       status: 'draft',
       interestedGuides: 0,
     },
@@ -216,6 +425,12 @@ export function PlansPage() {
       needsPickup: true,
       budget: '4000-6000',
       travelers: 3,
+      visibility: 'all',
+      guideHiringMode: 'point_to_point',
+      routeStops: [
+        { id: 'mock-3-1', regionId: null, placeName: '北京', startDate: '2026-08-10', endDate: '2026-08-12', lookingForPartner: false },
+        { id: 'mock-3-2', regionId: null, placeName: '西安', startDate: '2026-08-13', endDate: '2026-08-15', lookingForPartner: false },
+      ],
       status: 'draft',
       interestedGuides: 0,
     },
@@ -229,6 +444,7 @@ export function PlansPage() {
       pricePerDay: 1000,
       airportPickup: true,
       availability: 'available',
+      serviceScopeModes: ['point_to_point', 'full_route'],
       activeOrders: 2,
       upcomingBookings: 3,
     },
@@ -236,6 +452,26 @@ export function PlansPage() {
 
   const publishedPlans = myPlans.filter(p => p.status === 'published');
   const draftPlans = myPlans.filter(p => p.status === 'draft');
+  const regions = data?.regions ?? [];
+
+  useEffect(() => {
+    const guideProfiles = data?.profiles?.guide_profiles ?? [];
+    if (role !== 'guide' || guideProfiles.length === 0 || editingService) {
+      return;
+    }
+    setMyServices(guideProfiles.map((profile, index) => ({
+      id: index + 1,
+      profileId: profile.id,
+      location: profile.home_region_name ?? '未设置',
+      serviceAreas: profile.service_regions?.map(region => region.name) ?? [],
+      pricePerDay: Number(profile.daily_price_amount),
+      airportPickup: profile.offers_pickup,
+      availability: profile.is_listed ? 'available' : 'unavailable',
+      serviceScopeModes: profile.service_scope_modes?.length ? profile.service_scope_modes : ['point_to_point'],
+      activeOrders: 0,
+      upcomingBookings: 0,
+    })));
+  }, [data?.profiles?.guide_profiles, editingService, role]);
 
   const handleEdit = (plan: any, event: React.MouseEvent) => {
     const rect = (event.target as HTMLElement).getBoundingClientRect();
@@ -250,6 +486,8 @@ export function PlansPage() {
       travelers: plan.travelers,
       budget: plan.budget,
       visibility: 'all',
+      guideHiringMode: plan.guideHiringMode ?? 'point_to_point',
+      routeStops: plan.routeStops ?? [],
       notes: plan.notes ?? '',
     });
     setEditingPlan(plan.id);
@@ -298,6 +536,8 @@ export function PlansPage() {
       travelers: 1,
       budget: '',
       visibility: 'all',
+      guideHiringMode: 'point_to_point',
+      routeStops: [],
       notes: '',
     });
     setFormError(null);
@@ -305,22 +545,21 @@ export function PlansPage() {
 
   const validatePlanForm = () => {
     const requiredFields = [
-      formData.route.trim(),
-      formData.startDate,
-      formData.endDate,
+      String(formData.routeStops.length),
       String(formData.travelers || ''),
       formData.budget.trim(),
     ];
     if (requiredFields.some(value => !value) || !Number.isFinite(formData.travelers)) {
-      setFormError('请填写旅行路线、到达日期、离开日期、人数和预算。接 / 送与备注可以暂不填写。');
+      setFormError('请至少添加一个地点，并填写人数和预算。接 / 送与备注可以暂不填写。');
+      return false;
+    }
+    const invalidStop = formData.routeStops.find(stop => !stop.regionId || !stop.startDate || !stop.endDate || stop.startDate > stop.endDate);
+    if (invalidStop) {
+      setFormError('每个地点都必须选择城市，并且离开日期不能早于到达日期。');
       return false;
     }
     if (formData.travelers < 1) {
       setFormError('旅行人数必须至少为 1 人。');
-      return false;
-    }
-    if (formData.startDate > formData.endDate) {
-      setFormError('离开日期不能早于到达日期。');
       return false;
     }
     setFormError(null);
@@ -355,24 +594,30 @@ export function PlansPage() {
     try {
       const createdPlan = await apiClient.createTravelPlan(selectedMarket.id, {
         country_code: selectedMarket.default_country_code ?? 'CN',
-        arrival_date: formData.startDate,
-        arrival_region_id: null,
+        arrival_date: formData.routeStops[0].startDate,
+        arrival_region_id: formData.routeStops[0].regionId,
         needs_pickup: formData.needsPickup,
         traveler_count: formData.travelers,
         budget_min_amount: budget.min,
         budget_max_amount: budget.max,
         budget_currency: selectedMarket.default_currency ?? 'CNY',
         visibility: toBackendVisibility(),
-        title: formData.route.trim(),
+        title: formData.routeStops.map(stop => stop.placeName).join(' → '),
         notes: formData.notes?.trim() || null,
+        looking_for_partner: formData.routeStops.some(stop => stop.lookingForPartner),
+        guide_hiring_mode: formData.guideHiringMode,
       });
-      await apiClient.createRouteNode(createdPlan.id, {
-        region_id: null,
-        sequence: 1,
-        planned_start_at: `${formData.startDate}T00:00:00`,
-        planned_end_at: `${formData.endDate}T23:59:59`,
-        notes: formData.route.trim(),
-      });
+      await Promise.all(formData.routeStops.map((stop, index) =>
+        apiClient.createRouteNode(createdPlan.id, {
+          region_id: stop.regionId,
+          sequence: index + 1,
+          planned_start_at: `${stop.startDate}T00:00:00`,
+          planned_end_at: `${stop.endDate}T23:59:59`,
+          notes: stop.placeName,
+          place_name: stop.placeName,
+          looking_for_partner: stop.lookingForPartner,
+        })
+      ));
       if (status === 'published') {
         await apiClient.publishTravelPlan(createdPlan.id);
       }
@@ -381,6 +626,10 @@ export function PlansPage() {
         {
           id: createdPlan.id,
           ...formData,
+          route: formData.routeStops.map(stop => stop.placeName).join(' → '),
+          startDate: formData.routeStops[0].startDate,
+          endDate: formData.routeStops[formData.routeStops.length - 1].endDate,
+          arrivalPoint: formData.routeStops[0].placeName,
           status,
           interestedGuides: 0,
         },
@@ -402,15 +651,31 @@ export function PlansPage() {
       pricePerDay: service.pricePerDay,
       airportPickup: service.airportPickup,
       availability: service.availability,
+      serviceScopeModes: service.serviceScopeModes,
     });
     setServiceAreasInput(service.serviceAreas.join(', '));
     setEditingService(service.id);
   };
 
-  const handleSaveService = () => {
+  const handleSaveService = async () => {
+    const nextScopeModes = serviceFormData.serviceScopeModes.length
+      ? serviceFormData.serviceScopeModes
+      : ['point_to_point' as const];
+    const currentService = myServices.find(service => service.id === editingService);
+    try {
+      if (currentService?.profileId) {
+        await apiClient.updateGuideProfile(currentService.profileId, {
+          service_scope_modes: nextScopeModes,
+        });
+        await refreshAppData();
+      }
+    } catch (error) {
+      setFormError(error instanceof ApiError ? error.message : '导游服务设置保存失败，请稍后重试。');
+      return;
+    }
     setMyServices(prev => prev.map(s =>
       s.id === editingService
-        ? { ...s, ...serviceFormData, serviceAreas: serviceAreasInput.split(',').map(a => a.trim()).filter(Boolean) }
+        ? { ...s, ...serviceFormData, serviceScopeModes: nextScopeModes, serviceAreas: serviceAreasInput.split(',').map(a => a.trim()).filter(Boolean) }
         : s
     ));
     setEditingService(null);
@@ -450,7 +715,7 @@ export function PlansPage() {
                 className="bg-white rounded-xl shadow-lg p-6 mb-6 overflow-hidden"
               >
                 <h2 className="text-xl font-bold mb-4">创建旅行计划</h2>
-                <FormFields formData={formData} setFormData={setFormData} />
+                <FormFields formData={formData} setFormData={setFormData} regions={regions} />
                 {formError && (
                   <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                     <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
@@ -498,6 +763,9 @@ export function PlansPage() {
                     <div className="flex justify-between items-start mb-3">
                       <h3 className="font-bold text-lg">{plan.route}</h3>
                       <div className="flex items-center gap-2">
+                        <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                          {plan.guideHiringMode === 'full_route' ? '整条线路导游' : '点对点导游'}
+                        </span>
                         <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
                           已发布
                         </span>
@@ -524,7 +792,7 @@ export function PlansPage() {
                       </div>
                       <div className="flex items-center gap-2 text-gray-600">
                         <MapPin size={16} />
-                        <span>{plan.arrivalPoint}</span>
+                        <span>{plan.routeStops.map(stop => stop.placeName).join(' → ') || plan.arrivalPoint}</span>
                       </div>
                       <div className="flex items-center gap-2 text-gray-600">
                         <DollarSign size={16} />
@@ -533,6 +801,11 @@ export function PlansPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {plan.routeStops.some(stop => stop.lookingForPartner) && (
+                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
+                          looking for partner
+                        </span>
+                      )}
                       {plan.needsPickup && (
                         <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs flex items-center gap-1">
                           <Plane size={12} />
@@ -571,6 +844,9 @@ export function PlansPage() {
                     <div className="flex justify-between items-start mb-3">
                       <h3 className="font-bold text-lg text-gray-700">{plan.route}</h3>
                       <div className="flex items-center gap-2">
+                        <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
+                          {plan.guideHiringMode === 'full_route' ? '整条线路导游' : '点对点导游'}
+                        </span>
                         <span className="px-3 py-1 bg-gray-200 text-gray-600 rounded-full text-xs font-medium">
                           草稿
                         </span>
@@ -597,7 +873,7 @@ export function PlansPage() {
                       </div>
                       <div className="flex items-center gap-2 text-gray-500">
                         <MapPin size={16} />
-                        <span>{plan.arrivalPoint}</span>
+                        <span>{plan.routeStops.map(stop => stop.placeName).join(' → ') || plan.arrivalPoint}</span>
                       </div>
                       <div className="flex items-center gap-2 text-gray-500">
                         <DollarSign size={16} />
@@ -605,12 +881,19 @@ export function PlansPage() {
                       </div>
                     </div>
 
-                    {plan.needsPickup && (
+                    {(plan.needsPickup || plan.routeStops.some(stop => stop.lookingForPartner)) && (
                       <div className="flex items-center gap-2">
+                        {plan.routeStops.some(stop => stop.lookingForPartner) && (
+                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
+                            looking for partner
+                          </span>
+                        )}
+                        {plan.needsPickup && (
                         <span className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-xs flex items-center gap-1">
                           <Plane size={12} />
                           需要接机
                         </span>
+                        )}
                       </div>
                     )}
                   </motion.div>
@@ -688,7 +971,7 @@ export function PlansPage() {
 
                   {/* Scrollable Form Content */}
                   <div className="overflow-y-auto flex-1 px-6 py-4">
-                    <FormFields formData={formData} setFormData={setFormData} />
+                    <FormFields formData={formData} setFormData={setFormData} regions={regions} />
                     {formError && (
                       <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                         <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
@@ -756,6 +1039,13 @@ export function PlansPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-600 mb-2">接机服务</label>
                   <p className="font-medium">{service.airportPickup ? '提供' : '不提供'}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">服务方式</label>
+                  <p className="font-medium">
+                    {service.serviceScopeModes.map(mode => serviceModeLabels[mode]).join(' / ')}
+                  </p>
                 </div>
               </div>
 
@@ -938,6 +1228,41 @@ export function PlansPage() {
                             {label}
                           </button>
                         ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">可接受的服务方式</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {([
+                          ['point_to_point', '单一地区', '只服务某个城市或片段'],
+                          ['full_route', '整条路线', '可陪同完成整条线路'],
+                        ] as const).map(([value, label, description]) => {
+                          const checked = serviceFormData.serviceScopeModes.includes(value);
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => {
+                                const nextModes = checked
+                                  ? serviceFormData.serviceScopeModes.filter(mode => mode !== value)
+                                  : [...serviceFormData.serviceScopeModes, value];
+                                setServiceFormData({
+                                  ...serviceFormData,
+                                  serviceScopeModes: nextModes.length ? nextModes : [value],
+                                });
+                              }}
+                              className={`rounded-lg border-2 p-3 text-left transition-colors ${
+                                checked
+                                  ? 'border-blue-600 bg-blue-50 text-blue-700'
+                                  : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                              }`}
+                            >
+                              <div className="font-semibold text-sm">{label}</div>
+                              <div className="text-xs text-gray-500">{description}</div>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 

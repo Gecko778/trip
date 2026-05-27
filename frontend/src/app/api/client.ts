@@ -5,19 +5,25 @@ import type {
   AuthResponse,
   CurrentUser,
   AnonymousAgreement,
+  CalendarEventRecord,
   DisputeCase,
   GuideProfile,
+  GuideProfileUpdatePayload,
   GuideVerification,
   Market,
+  MapRouteRecord,
   MessageRecord,
   MessageThread,
   NotificationRecord,
+  PartnerLead,
   PublicUserProfile,
+  Region,
   RouteNodeCreatePayload,
   ProfileBundle,
   ReviewRecord,
   ServiceOrder,
   TravelPlan,
+  TravelPlanLead,
   TravelPlanCreatePayload,
 } from './types';
 
@@ -116,6 +122,9 @@ export const apiClient = {
   markets() {
     return request<Market[]>('/api/v1/markets', {}, false);
   },
+  regions(marketId: string) {
+    return request<Region[]>(`/api/v1/markets/${marketId}/regions`, {}, false);
+  },
   profiles() {
     return request<ProfileBundle>('/api/v1/me/profiles');
   },
@@ -131,11 +140,29 @@ export const apiClient = {
   guideProfile(guideProfileId: string) {
     return request<GuideProfile>(`/api/v1/guides/${guideProfileId}`);
   },
+  updateGuideProfile(guideProfileId: string, payload: GuideProfileUpdatePayload) {
+    return request<GuideProfile>(`/api/v1/guides/${guideProfileId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
   publicUserProfile(userId: string) {
     return request<PublicUserProfile>(`/api/v1/users/${userId}/public-profile`);
   },
   travelPlans(marketId: string) {
     return request<TravelPlan[]>(`/api/v1/markets/${marketId}/travel-plans`);
+  },
+  mapRoutes(marketId: string, role: 'traveler' | 'guide') {
+    return request<MapRouteRecord[]>(`/api/v1/markets/${marketId}/map-routes?role=${role}`);
+  },
+  calendarEvents(marketId: string, role: 'traveler' | 'guide') {
+    return request<CalendarEventRecord[]>(`/api/v1/markets/${marketId}/calendar-events?role=${role}`);
+  },
+  travelPlanLeads(marketId: string) {
+    return request<TravelPlanLead[]>(`/api/v1/markets/${marketId}/travel-plan-leads`);
+  },
+  partnerLeads(marketId: string) {
+    return request<PartnerLead[]>(`/api/v1/markets/${marketId}/partner-leads`);
   },
   createTravelPlan(marketId: string, payload: TravelPlanCreatePayload) {
     return request<TravelPlan>(`/api/v1/markets/${marketId}/travel-plans`, {
@@ -244,29 +271,53 @@ export const apiClient = {
   adminGuideVerifications(marketId: string) {
     return request<GuideVerification[]>(`/api/v1/admin/markets/${marketId}/guide-verifications`);
   },
-  async bootstrap(): Promise<AppBootstrapData> {
+  async bootstrap(activeRole: 'traveler' | 'guide' = 'traveler'): Promise<AppBootstrapData> {
     const markets = await apiClient.markets();
     const selectedMarket = markets[0] ?? null;
     if (!selectedMarket || !getAccessToken()) {
       return {
         markets,
         selectedMarket,
+        regions: [],
         profiles: null,
         guides: [],
         travelPlans: [],
+        mapRoutes: [],
+        calendarEvents: [],
+        travelPlanLeads: [],
+        partnerLeads: [],
         messageThreads: [],
         orders: [],
         notifications: [],
       };
     }
-    const [profiles, guides, travelPlans, messageThreads, orders, notifications] = await Promise.all([
+    const [regions, profiles, guides, travelPlans, mapRoutes, calendarEvents, travelPlanLeads, partnerLeads, messageThreads, orders, notifications] = await Promise.all([
+      apiClient.regions(selectedMarket.id).catch(() => []),
       apiClient.profiles().catch(() => null),
       apiClient.guides(selectedMarket.id).catch(() => []),
       apiClient.travelPlans(selectedMarket.id).catch(() => []),
+      apiClient.mapRoutes(selectedMarket.id, activeRole).catch(() => []),
+      apiClient.calendarEvents(selectedMarket.id, activeRole).catch(() => []),
+      apiClient.travelPlanLeads(selectedMarket.id).catch(() => []),
+      apiClient.partnerLeads(selectedMarket.id).catch(() => []),
       apiClient.messageThreads(selectedMarket.id).catch(() => []),
       apiClient.orders(selectedMarket.id).catch(() => []),
       apiClient.notifications().catch(() => []),
     ]);
-    return { markets, selectedMarket, profiles, guides, travelPlans, messageThreads, orders, notifications };
+    return {
+      markets,
+      selectedMarket,
+      regions,
+      profiles,
+      guides,
+      travelPlans,
+      mapRoutes,
+      calendarEvents,
+      travelPlanLeads,
+      partnerLeads,
+      messageThreads,
+      orders,
+      notifications,
+    };
   },
 };

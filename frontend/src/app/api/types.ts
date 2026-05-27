@@ -55,6 +55,20 @@ export interface Market {
   timezone?: string;
 }
 
+export interface Region {
+  id: string;
+  market_id: string;
+  parent_id: string | null;
+  type: string;
+  country_code: string;
+  code: string;
+  name: string;
+  latitude: string | null;
+  longitude: string | null;
+  timezone: string | null;
+  status: string;
+}
+
 export interface ProfileBundle {
   role_profiles: unknown[];
   traveler_profiles: Array<{ id: string; user_id: string; market_id: string; preference_json: Record<string, unknown> }>;
@@ -79,6 +93,9 @@ export interface TravelPlan {
   budget_max_amount?: string | null;
   budget_currency?: string | null;
   notes?: string | null;
+  looking_for_partner?: boolean;
+  partner_note?: string | null;
+  guide_hiring_mode?: GuideHiringMode;
   route_nodes?: Array<{
     id: string;
     region_id: string | null;
@@ -86,10 +103,14 @@ export interface TravelPlan {
     planned_start_at: string | null;
     planned_end_at: string | null;
     notes: string | null;
+    place_name?: string | null;
+    looking_for_partner?: boolean;
   }>;
 }
 
 export type PlanVisibility = 'public' | 'guides_only' | 'travelers_only' | 'private';
+export type GuideHiringMode = 'point_to_point' | 'full_route';
+export type GuideServiceScopeMode = 'point_to_point' | 'full_route';
 
 export interface TravelPlanCreatePayload {
   country_code: string;
@@ -103,6 +124,87 @@ export interface TravelPlanCreatePayload {
   visibility: PlanVisibility;
   title?: string | null;
   notes?: string | null;
+  looking_for_partner?: boolean;
+  partner_note?: string | null;
+  guide_hiring_mode?: GuideHiringMode;
+}
+
+export interface MapRoutePoint {
+  region_id: string | null;
+  name: string | null;
+  lat: number;
+  lng: number;
+}
+
+export interface MapRouteRecord {
+  id: string;
+  market_id: string;
+  viewer_role: UserRole;
+  traveler_user_id: string;
+  guide_user_id: string;
+  travel_plan_id: string | null;
+  status: string;
+  route_status: 'ongoing' | 'upcoming' | 'historical';
+  service_start_date: string | null;
+  service_end_date: string | null;
+  service_region_id: string | null;
+  service_region_name: string | null;
+  traveler_count: number;
+  guide_price_amount: string;
+  guide_price_currency: string;
+  traveler_display_name: string;
+  traveler_avatar_url: string | null;
+  guide_display_name: string;
+  guide_avatar_url: string | null;
+  points: MapRoutePoint[];
+}
+
+export interface CalendarEventRecord {
+  id: string;
+  source_type: 'travel_plan' | 'guide_availability' | 'order';
+  source_id: string;
+  role: UserRole;
+  title: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+  color: string;
+  line_style: 'solid' | 'dashed';
+}
+
+export interface TravelPlanLead {
+  travel_plan_id: string;
+  market_id: string;
+  traveler_user_id: string;
+  traveler_display_name: string;
+  traveler_avatar_url: string | null;
+  lead_region_id: string;
+  lead_region_name: string;
+  latitude: number | null;
+  longitude: number | null;
+  lead_start_date: string;
+  lead_end_date: string;
+  needs_pickup: boolean;
+  traveler_count: number;
+  budget_min_amount: string | null;
+  budget_max_amount: string | null;
+  budget_currency: string | null;
+  looking_for_partner: boolean;
+  guide_hiring_mode?: GuideHiringMode;
+  service_match_scope?: GuideServiceScopeMode;
+}
+
+export interface PartnerLead {
+  travel_plan_id: string;
+  traveler_user_id: string;
+  traveler_display_name: string;
+  traveler_avatar_url: string | null;
+  overlap_region_id: string;
+  overlap_region_name: string;
+  overlap_start_date: string;
+  overlap_end_date: string;
+  traveler_count: number;
+  partner_note: string | null;
 }
 
 export interface RouteNodeCreatePayload {
@@ -111,6 +213,8 @@ export interface RouteNodeCreatePayload {
   planned_start_at?: string | null;
   planned_end_at?: string | null;
   notes?: string | null;
+  place_name?: string | null;
+  looking_for_partner?: boolean;
 }
 
 export interface GuideProfile {
@@ -137,6 +241,7 @@ export interface GuideProfile {
   average_response_seconds: number | null;
   badge_status: string;
   is_listed: boolean;
+  service_scope_modes?: GuideServiceScopeMode[];
   service_region_ids: string[];
   service_regions?: Array<{
     id: string;
@@ -145,6 +250,18 @@ export interface GuideProfile {
     country_code: string;
     type: string;
   }>;
+}
+
+export interface GuideProfileUpdatePayload {
+  home_region_id?: string | null;
+  daily_price_amount?: string | number | null;
+  quote_currency?: string | null;
+  offers_pickup?: boolean | null;
+  gender?: string | null;
+  birth_year?: number | null;
+  language_tags?: string[] | null;
+  service_region_ids?: string[] | null;
+  service_scope_modes?: GuideServiceScopeMode[] | null;
 }
 
 export interface MessageThread {
@@ -302,9 +419,14 @@ export interface DisputeCase {
 export interface AppBootstrapData {
   markets: Market[];
   selectedMarket: Market | null;
+  regions: Region[];
   profiles: ProfileBundle | null;
   guides: GuideProfile[];
   travelPlans: TravelPlan[];
+  mapRoutes: MapRouteRecord[];
+  calendarEvents: CalendarEventRecord[];
+  travelPlanLeads: TravelPlanLead[];
+  partnerLeads: PartnerLead[];
   messageThreads: MessageThread[];
   orders: ServiceOrder[];
   notifications: NotificationRecord[];

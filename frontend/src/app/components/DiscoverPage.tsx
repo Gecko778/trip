@@ -1,15 +1,14 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Search, Filter, Star, MapPin, CheckCircle, Award, List, Grid3x3, Plane, UserPlus } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Search, Filter, Star, MapPin, CheckCircle, Award, List, Grid3x3, Plane, Users } from 'lucide-react';
 import { useApp } from '../App';
 import { motion, AnimatePresence } from 'motion/react';
 
 type LayoutMode = 'list' | 'grid';
-type ContentType = 'guides' | 'travelers';
+type ContentType = 'guides' | 'travelers' | 'partners';
 
 export function DiscoverPage() {
   const { role, data } = useApp();
-  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [priceRange, setPriceRange] = useState([0, 3000]);
@@ -17,6 +16,10 @@ export function DiscoverPage() {
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('list');
   const [contentType, setContentType] = useState<ContentType>('guides');
+
+  useEffect(() => {
+    setContentType(role === 'guide' ? 'travelers' : 'guides');
+  }, [role]);
 
   const getCountryFlag = (lang: string) => {
     const flagMap: { [key: string]: string } = {
@@ -303,36 +306,53 @@ export function DiscoverPage() {
     completedTrips: guide.completed_order_count,
   }));
   const guides = apiGuides.length > 0 ? apiGuides : mockGuides;
-  const followedUsers = guides.slice(0, 4).map(guide => ({
+  const followedUsers = role === 'traveler' ? guides.slice(0, 4).map(guide => ({
     id: guide.id,
     name: guide.name,
     avatar: guide.avatar,
-  }));
+  })) : [];
 
-  const apiTravelPlans = (data?.travelPlans ?? []).map(plan => {
-    const routeNodes = plan.route_nodes ?? [];
-    const route = routeNodes.length
-      ? routeNodes.map(node => `城市${node.sequence}`).join(' → ')
-      : plan.title || '未命名路线';
-    const firstNode = routeNodes[0];
-    const lastNode = routeNodes[routeNodes.length - 1];
-    return {
-      id: plan.id,
-      travelerUserId: plan.traveler_user_id,
-      traveler: plan.traveler_display_name ?? `旅行者 ${plan.traveler_user_id.slice(0, 4)}`,
-      avatar: plan.traveler_avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${plan.traveler_user_id}`,
-      nationality: plan.country_code === 'CN' ? '🇨🇳' : '🌐',
-      route,
-      startDate: firstNode?.planned_start_at?.slice(0, 10) ?? plan.arrival_date,
-      endDate: lastNode?.planned_end_at?.slice(0, 10) ?? plan.arrival_date,
-      arrivalPoint: plan.arrival_region_name ?? (plan.arrival_region_id ? `地区 ${plan.arrival_region_id.slice(0, 4)}` : '待确认'),
-      needsPickup: Boolean(plan.needs_pickup),
-      budget: [plan.budget_min_amount, plan.budget_max_amount].filter(Boolean).join('-') || '待确认',
-      travelers: plan.traveler_count ?? 1,
-      status: plan.status,
-    };
-  });
-  const travelPlans = apiTravelPlans.length > 0 ? apiTravelPlans : mockTravelPlans;
+  const apiTravelPlanLeads = (data?.travelPlanLeads ?? []).map(lead => ({
+    id: lead.travel_plan_id,
+    travelerUserId: lead.traveler_user_id,
+    traveler: lead.traveler_display_name,
+    avatar: lead.traveler_avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${lead.traveler_user_id}`,
+    nationality: '🌐',
+    route: lead.guide_hiring_mode === 'full_route'
+      ? `${lead.lead_region_name} 起始的整条线路`
+      : `${lead.lead_region_name} 可接单片段`,
+    startDate: lead.lead_start_date,
+    endDate: lead.lead_end_date,
+    arrivalPoint: lead.lead_region_name,
+    needsPickup: Boolean(lead.needs_pickup),
+    budget: [lead.budget_min_amount, lead.budget_max_amount].filter(Boolean).join('-') || '待确认',
+    travelers: lead.traveler_count ?? 1,
+    status: 'privacy_scoped',
+    privacyLabel: lead.guide_hiring_mode === 'full_route'
+      ? '整条线路同一导游'
+      : '仅显示匹配城市和日期',
+  }));
+  const partnerPlans = (data?.partnerLeads ?? []).map(lead => ({
+    id: lead.travel_plan_id,
+    travelerUserId: lead.traveler_user_id,
+    traveler: lead.traveler_display_name,
+    avatar: lead.traveler_avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${lead.traveler_user_id}`,
+    nationality: '🌐',
+    route: `${lead.overlap_region_name} 旅伴重叠行程`,
+    startDate: lead.overlap_start_date,
+    endDate: lead.overlap_end_date,
+    arrivalPoint: lead.overlap_region_name,
+    needsPickup: false,
+    budget: lead.partner_note ?? '已开启寻找旅伴',
+    travelers: lead.traveler_count ?? 1,
+    status: 'looking_for_partner',
+    privacyLabel: '双方均开启 looking for partner',
+  }));
+  const travelPlans = role === 'guide'
+    ? apiTravelPlanLeads
+    : contentType === 'partners'
+      ? partnerPlans
+      : [];
 
   return (
     <div className="max-w-screen-xl mx-auto">
@@ -373,7 +393,7 @@ export function DiscoverPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
             <input
               type="text"
-              placeholder={role === 'traveler' ? '搜索导游、城市...' : '搜索旅行计划...'}
+              placeholder={role === 'traveler' ? '搜索导游、城市、旅伴...' : '搜索可接单城市片段...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -391,29 +411,40 @@ export function DiscoverPage() {
         <div className="flex items-center gap-2 mb-3">
           {/* Content Type Toggle - Takes most space */}
           <div className="flex-1 flex gap-2">
+            {role === 'traveler' && (
+              <motion.button
+                onClick={() => setContentType('guides')}
+                whileTap={{ scale: 0.98 }}
+                className={`flex-1 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                  contentType === 'guides'
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <span className="inline-block mr-1">🧑‍✈️</span>
+                导游 ({guides.length})
+              </motion.button>
+            )}
             <motion.button
-              onClick={() => setContentType('guides')}
+              onClick={() => setContentType(role === 'guide' ? 'travelers' : 'partners')}
               whileTap={{ scale: 0.98 }}
               className={`flex-1 py-2.5 rounded-lg font-medium text-sm transition-all ${
-                contentType === 'guides'
+                contentType === 'travelers' || contentType === 'partners'
                   ? 'bg-blue-600 text-white shadow-md'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              <span className="inline-block mr-1">🧑‍✈️</span>
-              导游 ({guides.length})
-            </motion.button>
-            <motion.button
-              onClick={() => setContentType('travelers')}
-              whileTap={{ scale: 0.98 }}
-              className={`flex-1 py-2.5 rounded-lg font-medium text-sm transition-all ${
-                contentType === 'travelers'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <span className="inline-block mr-1">😎</span>
-              旅行者 ({travelPlans.length})
+              {role === 'guide' ? (
+                <>
+                  <span className="inline-block mr-1">😎</span>
+                  可接单片段 ({travelPlans.length})
+                </>
+              ) : (
+                <>
+                  <Users size={16} className="inline-block mr-1" />
+                  旅伴 ({partnerPlans.length})
+                </>
+              )}
             </motion.button>
           </div>
 
@@ -527,7 +558,7 @@ export function DiscoverPage() {
 
       {/* Results */}
       <div className="p-4">
-        {contentType === 'guides' ? (
+        {role === 'traveler' && contentType === 'guides' ? (
           /* Guide Listings */
           <AnimatePresence mode="wait">
             {layoutMode === 'list' ? (
@@ -705,7 +736,7 @@ export function DiscoverPage() {
                             <span className="text-2xl" title="国籍">{plan.nationality}</span>
                           </div>
                           <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                            已发布
+                            {plan.privacyLabel}
                           </span>
                         </div>
 
@@ -725,8 +756,10 @@ export function DiscoverPage() {
                             <span className="ml-2 font-medium">{plan.travelers}人</span>
                           </div>
                           <div>
-                            <span className="text-gray-500">预算:</span>
-                            <span className="ml-2 font-medium">¥{plan.budget}</span>
+                            <span className="text-gray-500">{contentType === 'partners' ? '说明:' : '预算:'}</span>
+                            <span className="ml-2 font-medium">
+                              {contentType === 'partners' ? plan.budget : `¥${plan.budget}`}
+                            </span>
                           </div>
                         </div>
 
@@ -741,7 +774,7 @@ export function DiscoverPage() {
                       </div>
 
                       <button className="px-6 py-2 h-fit bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm">
-                        联系
+                        {role === 'guide' ? '沟通接单' : '联系旅伴'}
                       </button>
                     </div>
                   </motion.div>
@@ -787,7 +820,9 @@ export function DiscoverPage() {
 
                     {/* Route - Main Focus */}
                     <div className="mb-3 text-center">
-                      <div className="text-xs text-gray-500 mb-1">旅行路线</div>
+                      <div className="text-xs text-gray-500 mb-1">
+                        {role === 'guide' ? '脱敏需求片段' : '重叠旅伴行程'}
+                      </div>
                       <div className="font-bold text-blue-600 text-sm leading-tight">
                         {plan.route}
                       </div>
@@ -809,7 +844,7 @@ export function DiscoverPage() {
                     </div>
 
                     <button className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm">
-                      联系
+                      {role === 'guide' ? '沟通接单' : '联系旅伴'}
                     </button>
                   </motion.div>
                 ))}

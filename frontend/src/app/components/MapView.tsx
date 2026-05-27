@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Filter, Layers, Box, Map as MapIcon, Star } from 'lucide-react';
+import { CalendarDays, Filter, Layers, Box, Map as MapIcon } from 'lucide-react';
 import { useApp } from '../App';
 import { motion, AnimatePresence } from 'motion/react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-type MapLayer = 'heat' | 'guides' | 'travelers' | 'routes';
+type MapLayer = 'routes' | 'calendar';
 type RouteStatus = 'ongoing' | 'upcoming' | 'historical';
 type LatLng = { lat: number; lng: number };
 
@@ -24,7 +24,8 @@ function createEmojiMarker(icon: string, bgClass: string, ringClass = 'border-wh
 
 export function MapView() {
   const { role, data } = useApp();
-  const [activeLayers, setActiveLayers] = useState<MapLayer[]>(['guides', 'routes']);
+  const [activeLayers, setActiveLayers] = useState<MapLayer[]>(['routes', 'calendar']);
+  const [selectedStatus, setSelectedStatus] = useState<RouteStatus | 'all'>('all');
   const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [is3DMode, setIs3DMode] = useState(false);
   const [tilt, setTilt] = useState(0);
@@ -45,7 +46,6 @@ export function MapView() {
     setTilt(is3DMode ? 0 : 45);
   };
 
-  const followedUserIds = [1, 2]; // IDs of followed users
   const cityCoordinates: Record<string, { lat: number; lng: number }> = {
     上海: { lat: 31.2304, lng: 121.4737 },
     北京: { lat: 39.9042, lng: 116.4074 },
@@ -54,18 +54,6 @@ export function MapView() {
     南京: { lat: 32.0603, lng: 118.7969 },
     西安: { lat: 34.3416, lng: 108.9398 },
   };
-
-  const guides = [
-    { id: 1, name: '张伟', location: '上海', lat: 31.2304, lng: 121.4737, price: 1000, isFollowed: true, activeOrderRole: 'guide' as 'guide' | 'traveler' | null },
-    { id: 2, name: '李娜', location: '北京', lat: 39.9042, lng: 116.4074, price: 1200, isFollowed: true, activeOrderRole: null },
-    { id: 3, name: '王芳', location: '杭州', lat: 30.2741, lng: 120.1551, price: 800, isFollowed: false, activeOrderRole: null },
-    { id: 4, name: '刘强', location: '苏州', lat: 31.2989, lng: 120.5853, price: 900, isFollowed: false, activeOrderRole: 'traveler' as 'guide' | 'traveler' | null },
-  ];
-
-  const travelers = [
-    { id: 5, plan: '上海-北京-上海', location: '上海', lat: 31.23, lng: 121.47, activeOrderRole: 'guide' as 'guide' | 'traveler' | null },
-    { id: 6, plan: '杭州-苏州', location: '杭州', lat: 30.27, lng: 120.16, activeOrderRole: 'traveler' as 'guide' | 'traveler' | null },
-  ];
 
   // Travel routes for travelers
   const mockTravelRoutes = [
@@ -139,42 +127,25 @@ export function MapView() {
     },
   ];
 
-  const apiTravelRoutes = (data?.travelPlans ?? []).map((plan, index) => {
-    const name = plan.title?.trim() || `旅行计划 ${index + 1}`;
-    const routeCities = name
-      .split(/[→\-—>]/)
-      .map(city => city.trim())
-      .filter(Boolean);
-    const points = routeCities
-      .map(city => cityCoordinates[city])
-      .filter((point): point is { lat: number; lng: number } => Boolean(point));
-    const fallbackPoints = [
-      cityCoordinates.上海,
-      index % 2 === 0 ? cityCoordinates.北京 : cityCoordinates.杭州,
-    ];
-    const arrivalTime = new Date(plan.arrival_date).getTime();
-    const status: RouteStatus =
-      plan.status === 'completed'
-        ? 'historical'
-        : Number.isFinite(arrivalTime) && arrivalTime <= Date.now()
-          ? 'ongoing'
-          : 'upcoming';
+  const apiRoleRoutes = (data?.mapRoutes ?? []).map(route => ({
+    id: route.id,
+    orderId: route.id,
+    name: role === 'traveler'
+      ? `${route.guide_display_name} · ${route.service_region_name ?? '预约路线'}`
+      : `${route.traveler_display_name} · ${route.service_region_name ?? '接单路线'}`,
+    status: route.route_status as RouteStatus,
+    points: route.points.length > 0
+      ? route.points.map(point => ({ lat: Number(point.lat), lng: Number(point.lng) }))
+      : [cityCoordinates.上海],
+    travelers: route.traveler_count,
+  }));
 
-    return {
-      id: plan.id,
-      name,
-      status,
-      points: points.length >= 2 ? points : fallbackPoints,
-      color: status === 'ongoing' ? 'blue' : status === 'upcoming' ? 'green' : 'gray',
-      travelers: plan.traveler_count,
-    };
-  });
-
-  const currentRoutes = apiTravelRoutes.length > 0
-    ? apiTravelRoutes
+  const currentRoutes = data
+    ? apiRoleRoutes.filter(route => selectedStatus === 'all' || route.status === selectedStatus)
     : role === 'traveler'
       ? mockTravelRoutes
       : guideRoutes;
+  const calendarEvents = data?.calendarEvents ?? [];
 
   const getRouteColor = (status: RouteStatus) => {
     switch (status) {
@@ -235,73 +206,33 @@ export function MapView() {
 
     if (activeLayers.includes('routes')) {
       currentRoutes.forEach(route => {
-        const line = L.polyline(
-          route.points.map((point: LatLng) => [point.lat, point.lng]),
-          {
-            color: getRouteColor(route.status),
-            weight: route.status === 'ongoing' ? 4 : 3,
-            opacity: route.status === 'historical' ? 0.45 : 0.85,
-            dashArray: route.status === 'upcoming' ? '6 8' : undefined,
-          }
-        );
-        line.bindPopup(`<strong>${route.name}</strong><br>${getRouteStatusLabel(route.status)}`);
-        line.addTo(overlayGroup);
-      });
-    }
-
-    if (activeLayers.includes('guides')) {
-      guides.forEach(guide => {
-        const displayIcon = guide.activeOrderRole === 'traveler' ? '😎' : '🧑‍✈️';
-        const displayBg = guide.activeOrderRole === 'traveler' ? 'bg-green-600' : 'bg-blue-600';
-        const ringClass = guide.isFollowed
-          ? 'border-yellow-400 ring-2 ring-yellow-400'
-          : guide.activeOrderRole
-            ? 'border-orange-400 ring-2 ring-orange-400'
-            : 'border-white';
-        const marker = L.marker([guide.lat, guide.lng], {
-          icon: createEmojiMarker(displayIcon, displayBg, ringClass),
-        });
-        marker.bindPopup(`
-          <a href="/user/${guide.id}" style="font-weight:600;color:#1d4ed8">${guide.name}</a>
-          <br>${guide.location}
-          <br><strong style="color:#2563eb">¥${guide.price}/天</strong>
-          ${guide.isFollowed ? '<br><span style="color:#ca8a04">已关注</span>' : ''}
-        `);
-        marker.addTo(overlayGroup);
-      });
-    }
-
-    if (activeLayers.includes('travelers')) {
-      travelers.forEach(traveler => {
-        const marker = L.marker([traveler.lat, traveler.lng], {
-          icon: createEmojiMarker('😎', 'bg-green-600', traveler.activeOrderRole ? 'border-orange-400 ring-2 ring-orange-400' : 'border-white'),
-        });
-        marker.bindPopup(`
-          <a href="/user/${traveler.id}" style="font-weight:600;color:#15803d">${traveler.plan}</a>
-          <br>${traveler.location}
-        `);
-        marker.addTo(overlayGroup);
-      });
-    }
-
-    if (activeLayers.includes('heat')) {
-      [
-        { center: cityCoordinates.上海, radius: 42 },
-        { center: cityCoordinates.北京, radius: 34 },
-        { center: cityCoordinates.杭州, radius: 28 },
-      ].forEach(item => {
-        L.circleMarker([item.center.lat, item.center.lng], {
-          radius: item.radius,
-          color: '#f97316',
-          fillColor: '#ef4444',
-          fillOpacity: 0.18,
-          opacity: 0.35,
-        }).addTo(overlayGroup);
+        if (route.points.length >= 2) {
+          const line = L.polyline(
+            route.points.map((point: LatLng) => [point.lat, point.lng]),
+            {
+              color: getRouteColor(route.status),
+              weight: route.status === 'ongoing' ? 4 : 3,
+              opacity: route.status === 'historical' ? 0.45 : 0.85,
+              dashArray: route.status === 'upcoming' ? '6 8' : undefined,
+            }
+          );
+          line.bindPopup(`<strong>${route.name}</strong><br>${getRouteStatusLabel(route.status)}`);
+          line.addTo(overlayGroup);
+          return;
+        }
+        const point = route.points[0];
+        if (point) {
+          const marker = L.marker([point.lat, point.lng], {
+            icon: createEmojiMarker(role === 'traveler' ? '😎' : '🧑‍✈️', route.status === 'historical' ? 'bg-gray-500' : 'bg-blue-600'),
+          });
+          marker.bindPopup(`<strong>${route.name}</strong><br>${getRouteStatusLabel(route.status)}`);
+          marker.addTo(overlayGroup);
+        }
       });
     }
 
     requestAnimationFrame(() => map.invalidateSize());
-  }, [activeLayers, role, data?.travelPlans, is3DMode]);
+  }, [activeLayers, role, data?.mapRoutes, selectedStatus, is3DMode]);
 
   return (
     <div className="relative h-[calc(100vh-7rem)]">
@@ -353,10 +284,8 @@ export function MapView() {
             >
               <h3 className="font-medium mb-3 text-sm">地图图层</h3>
               {[
-                { id: 'heat' as MapLayer, label: '旅游热度' },
-                { id: 'guides' as MapLayer, label: '导游分布' },
-                { id: 'travelers' as MapLayer, label: '旅行者分布' },
                 { id: 'routes' as MapLayer, label: role === 'traveler' ? '旅行路线' : '导游路线' },
+                { id: 'calendar' as MapLayer, label: '日历占用' },
               ].map(layer => (
                 <label key={layer.id} className="flex items-center mb-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
                   <input
@@ -392,11 +321,22 @@ export function MapView() {
       </div>
 
       {/* Filter Button */}
-      <div className="absolute top-4 left-4 z-20">
-        <button className="px-4 h-12 bg-white rounded-full shadow-lg flex items-center gap-2 hover:bg-gray-50">
+      <div className="absolute top-4 left-4 z-20 flex gap-2">
+        <button className="px-4 h-12 bg-white rounded-full shadow-lg flex items-center gap-2">
           <Filter size={20} />
           <span className="text-sm font-medium">筛选</span>
         </button>
+        {(['all', 'ongoing', 'upcoming', 'historical'] as Array<RouteStatus | 'all'>).map(status => (
+          <button
+            key={status}
+            onClick={() => setSelectedStatus(status)}
+            className={`px-3 h-12 rounded-full shadow-lg text-sm ${
+              selectedStatus === status ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'
+            }`}
+          >
+            {status === 'all' ? '全部' : getRouteStatusLabel(status)}
+          </button>
+        ))}
       </div>
 
       {/* Legend */}
@@ -410,29 +350,15 @@ export function MapView() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-xs">🧑‍✈️</div>
-            <span>导游身份</span>
+            <span>{role === 'guide' ? '我作为导游的订单路线' : '我作为旅客的订单路线'}</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-green-600 flex items-center justify-center text-xs">😎</div>
-            <span>旅行者身份</span>
+            <div className="w-8 h-0.5 bg-green-500 border-t border-dashed border-green-700"></div>
+            <span>{role === 'guide' ? '可服务时间' : '未确认旅行计划'}</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-blue-600 border-2 border-orange-400 ring-2 ring-orange-400 flex items-center justify-center text-xs relative">
-              🧑‍✈️
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-400 rounded-full border border-white flex items-center justify-center" style={{fontSize: '8px'}}>
-                ⚡
-              </div>
-            </div>
-            <span>订单进行中</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-blue-600 border-2 border-yellow-400 ring-2 ring-yellow-400 flex items-center justify-center text-xs relative">
-              🧑‍✈️
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full border border-white flex items-center justify-center">
-                <Star size={6} className="text-white fill-white" />
-              </div>
-            </div>
-            <span>已关注</span>
+            <div className="w-8 h-0.5 bg-red-500"></div>
+            <span>{role === 'guide' ? '已预约服务' : '已预约旅行'}</span>
           </div>
         </div>
       </motion.div>
@@ -449,7 +375,7 @@ export function MapView() {
             {role === 'traveler' ? '我的旅行路线' : '我的导游路线'}
           </h3>
           <div className="space-y-2 max-h-40 overflow-y-auto">
-            {currentRoutes.map(route => (
+            {currentRoutes.length > 0 ? currentRoutes.map(route => (
               <div
                 key={route.id}
                 className="flex items-start gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
@@ -463,7 +389,47 @@ export function MapView() {
                   <p className="text-xs text-gray-500">{getRouteStatusLabel(route.status)}</p>
                 </div>
               </div>
-            ))}
+            )) : (
+              <p className="text-xs text-gray-500">
+                {role === 'traveler' ? '当前旅客身份没有订单路线。' : '当前导游身份没有接单路线。'}
+              </p>
+            )}
+          </div>
+        </motion.div>
+      )}
+
+      {activeLayers.includes('calendar') && (
+        <motion.div
+          className="absolute bottom-52 right-4 bg-white rounded-lg shadow-lg p-4 max-w-xs z-20"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarDays size={16} />
+            <h3 className="font-medium text-sm">{role === 'guide' ? '导游日历' : '旅客日历'}</h3>
+          </div>
+          <div className="space-y-2 max-h-40 overflow-y-auto">
+            {calendarEvents.length > 0 ? calendarEvents.map(event => (
+              <Link
+                key={event.id}
+                to={event.source_type === 'order' ? `/order/${event.source_id}` : '#'}
+                className="block rounded border border-gray-100 p-2 hover:bg-gray-50"
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className="h-2 w-8 rounded"
+                    style={{
+                      backgroundColor: event.color,
+                      borderTop: event.line_style === 'dashed' ? '1px dashed #166534' : undefined,
+                    }}
+                  />
+                  <span className="text-xs font-medium truncate">{event.title}</span>
+                </div>
+                <p className="mt-1 text-xs text-gray-500">{event.start_date} - {event.end_date}</p>
+              </Link>
+            )) : (
+              <p className="text-xs text-gray-500">当前身份暂无日历记录。</p>
+            )}
           </div>
         </motion.div>
       )}

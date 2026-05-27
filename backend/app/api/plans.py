@@ -76,6 +76,9 @@ def create_travel_plan(
             visibility=payload.visibility,
             title=payload.title,
             notes=payload.notes,
+            looking_for_partner=payload.looking_for_partner,
+            partner_note=payload.partner_note,
+            guide_hiring_mode=payload.guide_hiring_mode,
         )
         session.commit()
     except IntegrityError as exc:
@@ -120,6 +123,9 @@ def update_travel_plan(
             visibility=payload.visibility,
             title=payload.title,
             notes=payload.notes,
+            looking_for_partner=payload.looking_for_partner,
+            partner_note=payload.partner_note,
+            guide_hiring_mode=payload.guide_hiring_mode,
             updated_by=current_user["id"],
         )
         session.commit()
@@ -200,6 +206,8 @@ def create_route_node(
             planned_start_at=payload.planned_start_at,
             planned_end_at=payload.planned_end_at,
             notes=payload.notes,
+            place_name=payload.place_name,
+            looking_for_partner=payload.looking_for_partner,
         )
         session.commit()
     except IntegrityError as exc:
@@ -229,6 +237,8 @@ def update_route_node(
             planned_start_at=payload.planned_start_at,
             planned_end_at=payload.planned_end_at,
             notes=payload.notes,
+            place_name=payload.place_name,
+            looking_for_partner=payload.looking_for_partner,
         )
         session.commit()
     except IntegrityError as exc:
