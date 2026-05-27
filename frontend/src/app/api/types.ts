@@ -309,6 +309,15 @@ export interface PublicUserProfile {
   roles: UserRoleAssignment[];
   traveler_profiles: Array<{ id: string; user_id: string; market_id: string; preference_json: Record<string, unknown> }>;
   guide_profiles: GuideProfile[];
+  is_following?: boolean;
+}
+
+export interface FollowedUser {
+  id: string;
+  display_name: string;
+  avatar_url: string | null;
+  market_id: string | null;
+  created_at: string;
 }
 
 export interface ServiceOrder {
@@ -427,6 +436,7 @@ export interface AppBootstrapData {
   calendarEvents: CalendarEventRecord[];
   travelPlanLeads: TravelPlanLead[];
   partnerLeads: PartnerLead[];
+  followedUsers: FollowedUser[];
   messageThreads: MessageThread[];
   orders: ServiceOrder[];
   notifications: NotificationRecord[];

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, MessageCircle, UserPlus, UserMinus, Star, MapPin, Calendar, Award, Shield, Languages, Plane, ChevronRight, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useApp } from '../App';
 import { apiClient, ApiError } from '../api/client';
 import type { PublicUserProfile } from '../api/types';
 
@@ -11,7 +12,9 @@ const fallbackAvatar = (seed: string) => `https://api.dicebear.com/7.x/avataaars
 export function UserProfilePage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { data, refreshAppData } = useApp();
   const [isFollowing, setIsFollowing] = useState(false);
+  const [followError, setFollowError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'reviews' | 'gallery'>('overview');
   const [viewRole, setViewRole] = useState<ViewRole>('guide');
   const [isAnimating, setIsAnimating] = useState(false);
@@ -34,6 +37,7 @@ export function UserProfilePage() {
         }
         if (canceled) return;
         setProfile(nextProfile);
+        setIsFollowing(Boolean(nextProfile.is_following));
         if (!nextProfile.guide_profiles.length && nextProfile.traveler_profiles.length) {
           setViewRole('traveler');
         }
@@ -125,6 +129,24 @@ export function UserProfilePage() {
 
   const handleBack = () => {
     navigate(-1);
+  };
+
+  const handleFollowToggle = async () => {
+    if (!user?.id) return;
+    const nextValue = !isFollowing;
+    setIsFollowing(nextValue);
+    setFollowError(null);
+    try {
+      if (nextValue) {
+        await apiClient.followUser(user.id, data?.selectedMarket?.id ?? null);
+      } else {
+        await apiClient.unfollowUser(user.id);
+      }
+      await refreshAppData();
+    } catch (error) {
+      setIsFollowing(!nextValue);
+      setFollowError(error instanceof ApiError ? error.message : '关注状态更新失败');
+    }
   };
 
   const recentReviews: Array<{
@@ -324,7 +346,7 @@ export function UserProfilePage() {
               发消息
             </Link>
             <button
-              onClick={() => setIsFollowing(!isFollowing)}
+              onClick={handleFollowToggle}
               className={`flex-1 py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
                 isFollowing
                   ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -335,6 +357,11 @@ export function UserProfilePage() {
               {isFollowing ? '取消关注' : '关注'}
             </button>
           </div>
+          {followError && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {followError}
+            </div>
+          )}
 
           {/* Member Since */}
           <div className="flex items-center gap-2 text-sm text-gray-500">

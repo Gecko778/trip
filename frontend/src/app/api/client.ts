@@ -7,6 +7,7 @@ import type {
   AnonymousAgreement,
   CalendarEventRecord,
   DisputeCase,
+  FollowedUser,
   GuideProfile,
   GuideProfileUpdatePayload,
   GuideVerification,
@@ -164,6 +165,23 @@ export const apiClient = {
   partnerLeads(marketId: string) {
     return request<PartnerLead[]>(`/api/v1/markets/${marketId}/partner-leads`);
   },
+  followedUsers() {
+    return request<FollowedUser[]>('/api/v1/me/follows');
+  },
+  followUser(userId: string, marketId?: string | null) {
+    const suffix = marketId ? `?market_id=${marketId}` : '';
+    return request<FollowedUser | { follower_user_id: string; followed_user_id: string }>(`/api/v1/users/${userId}/follow${suffix}`, {
+      method: 'POST',
+    });
+  },
+  unfollowUser(userId: string) {
+    return request<{ deleted: boolean }>(`/api/v1/users/${userId}/follow`, {
+      method: 'DELETE',
+    });
+  },
+  followStatus(userId: string) {
+    return request<{ is_following: boolean }>(`/api/v1/users/${userId}/follow`);
+  },
   createTravelPlan(marketId: string, payload: TravelPlanCreatePayload) {
     return request<TravelPlan>(`/api/v1/markets/${marketId}/travel-plans`, {
       method: 'POST',
@@ -286,12 +304,13 @@ export const apiClient = {
         calendarEvents: [],
         travelPlanLeads: [],
         partnerLeads: [],
+        followedUsers: [],
         messageThreads: [],
         orders: [],
         notifications: [],
       };
     }
-    const [regions, profiles, guides, travelPlans, mapRoutes, calendarEvents, travelPlanLeads, partnerLeads, messageThreads, orders, notifications] = await Promise.all([
+    const [regions, profiles, guides, travelPlans, mapRoutes, calendarEvents, travelPlanLeads, partnerLeads, followedUsers, messageThreads, orders, notifications] = await Promise.all([
       apiClient.regions(selectedMarket.id).catch(() => []),
       apiClient.profiles().catch(() => null),
       apiClient.guides(selectedMarket.id).catch(() => []),
@@ -300,6 +319,7 @@ export const apiClient = {
       apiClient.calendarEvents(selectedMarket.id, activeRole).catch(() => []),
       apiClient.travelPlanLeads(selectedMarket.id).catch(() => []),
       apiClient.partnerLeads(selectedMarket.id).catch(() => []),
+      apiClient.followedUsers().catch(() => []),
       apiClient.messageThreads(selectedMarket.id).catch(() => []),
       apiClient.orders(selectedMarket.id).catch(() => []),
       apiClient.notifications().catch(() => []),
@@ -315,6 +335,7 @@ export const apiClient = {
       calendarEvents,
       travelPlanLeads,
       partnerLeads,
+      followedUsers,
       messageThreads,
       orders,
       notifications,

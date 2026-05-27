@@ -55,6 +55,41 @@ def unfollow_user(session: Session, *, follower_user_id: UUID, followed_user_id:
     return result.rowcount > 0
 
 
+def is_following(session: Session, *, follower_user_id: UUID, followed_user_id: UUID) -> bool:
+    row = session.execute(
+        text(
+            """
+            SELECT 1
+            FROM follow_relations
+            WHERE follower_user_id = :follower_user_id
+              AND followed_user_id = :followed_user_id
+              AND deleted_at IS NULL
+            LIMIT 1
+            """
+        ),
+        {"follower_user_id": follower_user_id, "followed_user_id": followed_user_id},
+    ).first()
+    return row is not None
+
+
+def list_followed_users(session: Session, *, follower_user_id: UUID) -> list[dict[str, Any]]:
+    rows = session.execute(
+        text(
+            """
+            SELECT u.id, u.display_name, u.avatar_url, fr.market_id, fr.created_at
+            FROM follow_relations fr
+            JOIN users u ON u.id = fr.followed_user_id
+            WHERE fr.follower_user_id = :follower_user_id
+              AND fr.deleted_at IS NULL
+              AND u.deleted_at IS NULL
+            ORDER BY fr.created_at DESC
+            """
+        ),
+        {"follower_user_id": follower_user_id},
+    )
+    return [_dict(row) for row in rows]
+
+
 def block_user(
     session: Session,
     *,

@@ -306,11 +306,13 @@ export function DiscoverPage() {
     completedTrips: guide.completed_order_count,
   }));
   const guides = apiGuides.length > 0 ? apiGuides : mockGuides;
-  const followedUsers = role === 'traveler' ? guides.slice(0, 4).map(guide => ({
-    id: guide.id,
-    name: guide.name,
-    avatar: guide.avatar,
-  })) : [];
+  const followedUsers = role === 'traveler'
+    ? (data?.followedUsers ?? []).map(user => ({
+        id: user.id,
+        name: user.display_name,
+        avatar: user.avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`,
+      }))
+    : [];
 
   const apiTravelPlanLeads = (data?.travelPlanLeads ?? []).map(lead => ({
     id: lead.travel_plan_id,

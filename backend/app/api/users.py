@@ -8,6 +8,7 @@ from app.core.permissions import get_current_user, require_permission
 from app.core.responses import envelope
 from app.db.deps import get_db_session
 from app.repositories import auth as auth_repository
+from app.repositories import communications as communication_repository
 from app.repositories import profiles as profile_repository
 from app.schemas.auth import RoleSwitchRequest, UserRoleAssignRequest, UserUpdateRequest
 
@@ -55,7 +56,7 @@ def list_users(
 def get_public_user_profile(
     user_id: UUID,
     request: Request,
-    _current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     session: Session = Depends(get_db_session),
 ) -> dict:
     user = auth_repository.get_user(session, user_id)
@@ -67,6 +68,11 @@ def get_public_user_profile(
             "roles": auth_repository.list_user_roles(session, user_id),
             "traveler_profiles": profile_repository.list_traveler_profiles(session, user_id),
             "guide_profiles": profile_repository.list_guide_profiles(session, user_id),
+            "is_following": communication_repository.is_following(
+                session,
+                follower_user_id=current_user["id"],
+                followed_user_id=user_id,
+            ),
         },
         trace_id=request.state.trace_id,
     )

@@ -147,6 +147,37 @@ def follow_user(
     return envelope(data=follow, trace_id=request.state.trace_id)
 
 
+@router.get("/me/follows")
+def list_my_follows(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    session: Session = Depends(get_db_session),
+) -> dict:
+    return envelope(
+        data=communication_repository.list_followed_users(session, follower_user_id=current_user["id"]),
+        trace_id=request.state.trace_id,
+    )
+
+
+@router.get("/users/{user_id}/follow")
+def get_follow_status(
+    user_id: UUID,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    session: Session = Depends(get_db_session),
+) -> dict:
+    return envelope(
+        data={
+            "is_following": communication_repository.is_following(
+                session,
+                follower_user_id=current_user["id"],
+                followed_user_id=user_id,
+            )
+        },
+        trace_id=request.state.trace_id,
+    )
+
+
 @router.delete("/users/{user_id}/follow")
 def unfollow_user(
     user_id: UUID,
